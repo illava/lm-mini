@@ -184,6 +184,8 @@ class DesktopUsbBridge extends ChangeNotifier {
 
   void _wireSocket(int deviceId, Socket sock, Uint8List leftover) {
     var buf = BytesBuilder(copy: false)..add(leftover);
+    // Request ids restart per phone connection, so scope them to this socket.
+    final channel = 'usb-$deviceId-${identityHashCode(sock)}';
 
     void handleLine(String line) {
       if (line.isEmpty) return;
@@ -199,7 +201,13 @@ class DesktopUsbBridge extends ChangeNotifier {
           msg: msg,
           backends: _backends,
           send: (frame) => _send(sock, frame),
+          channel: channel,
         ));
+      } else if (type == 'cancel') {
+        final id = msg['id']?.toString();
+        if (id != null) {
+          DesktopRequestProxy.instance.cancel(id, channel: channel);
+        }
       } else if (type == 'ping') {
         _send(sock, {'type': 'pong'});
       }
@@ -224,6 +232,7 @@ class DesktopUsbBridge extends ChangeNotifier {
       buf.add(chunk);
       drain();
     }, onDone: () {
+      DesktopRequestProxy.instance.cancelAll(channel: channel);
       final slot = _devices[deviceId];
       if (slot != null && identical(slot.socket, sock)) {
         slot.socket = null;

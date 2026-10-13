@@ -75,6 +75,12 @@ struct LMMiniSiriSnapshot {
   let temperature: Double
   let maxTokens: Int
   let ineligibleReason: String?
+  /// LM Studio's own chat API, set when the user's MCP tools are on.
+  let toolsChatUrl: String?
+  /// MCP tools in LM Studio `integrations` format (plugin / ephemeral_mcp).
+  let integrations: [[String: Any]]
+
+  var usesTools: Bool { toolsChatUrl != nil && !integrations.isEmpty }
 
   static var current: LMMiniSiriSnapshot? {
     guard let json = LMMiniSiriStore.defaults?.string(forKey: LMMiniSiriStore.snapshotKey),
@@ -92,7 +98,9 @@ struct LMMiniSiriSnapshot {
       headers: headers,
       temperature: (obj["temperature"] as? NSNumber)?.doubleValue ?? 0.7,
       maxTokens: (obj["maxTokens"] as? NSNumber)?.intValue ?? 512,
-      ineligibleReason: obj["ineligibleReason"] as? String
+      ineligibleReason: obj["ineligibleReason"] as? String,
+      toolsChatUrl: obj["toolsChatUrl"] as? String,
+      integrations: obj["integrations"] as? [[String: Any]] ?? []
     )
   }
 }
@@ -366,6 +374,14 @@ enum LMMiniSiriNativeChat {
           let model = snap.model, !model.isEmpty
     else { return nil }
 
+    // MCP tools (web search …) only run through LM Studio's own API; the
+    // OpenAI-compatible endpoint below never offers them to the model.
+    if snap.usesTools,
+       let answer = try await completeWithTools(
+         snap: snap, model: model, system: system, user: user) {
+      return answer
+    }
+
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.timeoutInterval = timeout
@@ -434,6 +450,95 @@ enum LMMiniSiriNativeChat {
     throw LMMiniSiriFailure("The model server returned HTTP \(status). \(raw.prefix(180))")
   }
 
+  /// One-shot LM Studio `/api/v1/chat` with the user's MCP tools. LM Studio
+  /// runs the tool calls itself and returns the final answer. Returns nil
+  /// when this LM Studio has no `/api/v1/chat` (404 on older versions) or the
+  /// server can't be reached, so the caller falls back. Throws when the
+  /// server answered with an error.
+  static func completeWithTools(
+    snap: LMMiniSiriSnapshot,
+    model: String,
+    system: String,
+    user: String,
+    timeout: TimeInterval = 60
+  ) async throws -> String? {
+    guard let urlString = snap.toolsChatUrl, let url = URL(string: urlString)
+    else { return nil }
+    let body: [String: Any] = [
+      "model": model,
+      "input": user,
+      "system_prompt": system,
+      "integrations": snap.integrations,
+      "temperature": snap.temperature,
+      // Room for the tool call plus the answer.
+      "max_output_tokens": max(snap.maxTokens, 1024),
+      "stream": false,
+    ]
+    let payload = try JSONSerialization.data(withJSONObject: body)
+    var headers = snap.headers
+    headers["Content-Type"] = "application/json"
+
+    let data: Data
+    let status: Int
+    do {
+      if url.scheme?.lowercased() == "http" {
+        let result = try await LMMiniPlainHTTP.post(
+          url: url, headers: headers, body: payload, timeout: timeout)
+        data = result.body
+        status = result.status
+      } else {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+        request.httpBody = payload
+        let (bytes, response) = try await URLSession.shared.data(for: request)
+        data = bytes
+        status = (response as? HTTPURLResponse)?.statusCode ?? 0
+      }
+    } catch {
+      let ns = error as NSError
+      if ns.domain == NSURLErrorDomain &&
+          (ns.code == NSURLErrorCannotConnectToHost ||
+           ns.code == NSURLErrorNotConnectedToInternet ||
+           ns.code == NSURLErrorCannotFindHost) {
+        return nil
+      }
+      throw LMMiniSiriFailure(ns.localizedDescription)
+    }
+
+    if status == 404 { return nil }
+    if status == 200 {
+      // Older LM Studio answers an unknown route with HTTP 200 and
+      // {"error":"Unexpected endpoint…"}: no `output` means no tools API
+      // here, so fall back to the plain completion.
+      guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            obj["output"] is [Any]
+      else { return nil }
+      if let answer = parseLmStudioOutput(data) { return answer }
+      throw LMMiniSiriFailure("The model returned an empty reply.")
+    }
+    if let server = parseErrorMessage(data) {
+      throw LMMiniSiriFailure(server)
+    }
+    let raw = String(data: data, encoding: .utf8) ?? ""
+    throw LMMiniSiriFailure("The model server returned HTTP \(status). \(raw.prefix(180))")
+  }
+
+  /// `/api/v1/chat` reply: the text is in `output[].content` of `message`
+  /// items (tool calls are separate items).
+  private static func parseLmStudioOutput(_ data: Data) -> String? {
+    guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let output = obj["output"] as? [[String: Any]]
+    else { return nil }
+    var text = ""
+    for item in output where (item["type"] as? String) == "message" {
+      if let content = item["content"] as? String { text += content }
+    }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
   /// Streams an OpenAI-style completion. Returns nil when the snapshot cannot
   /// serve the request. Throws when the server was reached but failed.
   /// `onDelta` receives short chunks, not single tokens.
@@ -448,6 +553,15 @@ enum LMMiniSiriNativeChat {
           let urlString = snap.chatUrl, let url = URL(string: urlString),
           let model = snap.model, !model.isEmpty
     else { return nil }
+
+    // With MCP tools the answer comes back in one piece (LM Studio runs the
+    // tools first), so deliver it as a single delta.
+    if snap.usesTools,
+       let answer = try await completeWithTools(
+         snap: snap, model: model, system: system, user: user) {
+      onDelta(answer)
+      return answer
+    }
 
     var request = URLRequest(url: url)
     request.httpMethod = "POST"

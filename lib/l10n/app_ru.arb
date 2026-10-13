@@ -543,12 +543,12 @@
   "voiceKokoroDeleteTitle": "Удалить модель Kokoro?",
   "voiceKokoroDeleteMessage": "Это удалит все загруженные языковые пакеты TTS. Вы сможете загрузить их позже.",
   "voiceKokoroDeleteConfirm": "Удалить",
-  "voiceTtsLanguagePacksHint": "Английский, испанский, французский и китайский используют одну загрузку (~400 МБ). Немецкий и русский меньше (~34 МБ).",
+  "voiceTtsLanguagePacksHint": "Английский, испанский, французский и китайский используют одну загрузку Kokoro (~400 МБ). Немецкий и русский — более лёгкие голоса Piper (~34 МБ).",
   "voiceTtsLanguagePacks": "Голосовые пакеты",
   "voiceTtsLanguagePacksSubtitleNone": "Скачайте язык, чтобы говорить на этом устройстве",
   "voiceTtsLanguagePacksSubtitleReady": "{ready} из {total} языков готовы",
   "voiceTtsLanguagePacksSubtitleDownloading": "Загрузка {name}…",
-  "voiceTtsSharedPackSize": "Общая загрузка · ~{size} МБ",
+  "voiceTtsSharedPackSize": "Kokoro · общая загрузка · ~{size} МБ",
   "@voiceTtsSharedPackSize": {
     "placeholders": {
       "size": {
@@ -556,7 +556,7 @@
       }
     }
   },
-  "voiceTtsPiperPackSize": "Меньшая загрузка · ~{size} МБ",
+  "voiceTtsPiperPackSize": "Голос Piper · меньшая загрузка · ~{size} МБ",
   "@voiceTtsPiperPackSize": {
     "placeholders": {
       "size": {
@@ -2357,5 +2357,6 @@
   "remoteAccessSwitchConnecting": "Подключение к компьютеру…",
   "remoteAccessUnreachable": "Удалённый доступ включён, но компьютер не отвечает. Убедитесь, что он не спит и общий доступ включён.",
   "remoteAccessTurnOnFailed": "Не удалось включить удалённый доступ. Попробуйте ещё раз.",
+  "remoteAccessTurnOff": "Выключить удалённый доступ",
   "remoteAccessTurnOffFailed": "Не удалось выключить удалённый доступ. Попробуйте ещё раз."
 }

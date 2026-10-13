@@ -2393,7 +2393,8 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
             ? '${(_kokoroDownloadProgress * 100).toStringAsFixed(0)}%'
             : l10n.voiceStartingDownload)
         : ready
-            ? '${lang.voiceLabel} · ${l10n.voiceReady}'
+            // Name the engine: German / Russian are Piper voices, not Kokoro.
+            ? '${lang.voiceLabel} · ${spec?.engine == TtsEngineKind.vits ? 'Piper' : 'Kokoro'} · ${l10n.voiceReady}'
             : (lang.sharesKokoroPack
                 ? l10n.voiceTtsSharedPackSize(sizeMB)
                 : l10n.voiceTtsPiperPackSize(sizeMB));

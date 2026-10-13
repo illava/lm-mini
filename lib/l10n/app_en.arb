@@ -827,7 +827,7 @@
   "voiceKokoroDeleteTitle": "Delete Kokoro Model?",
   "voiceKokoroDeleteMessage": "This will remove every downloaded TTS language pack. You can re-download them later.",
   "voiceKokoroDeleteConfirm": "Delete",
-  "voiceTtsLanguagePacksHint": "English, Spanish, French, and Chinese share one download (~400 MB). German and Russian are smaller (~34 MB each).",
+  "voiceTtsLanguagePacksHint": "English, Spanish, French, and Chinese share one Kokoro download (~400 MB). German and Russian use smaller Piper voices (~34 MB each).",
   "voiceTtsLanguagePacks": "Voice packs",
   "voiceTtsLanguagePacksSubtitleNone": "Download a language to speak on this device",
   "voiceTtsLanguagePacksSubtitleReady": "{ready} of {total} languages ready",
@@ -843,7 +843,7 @@
       "name": { "type": "String" }
     }
   },
-  "voiceTtsSharedPackSize": "Shared download · ~{size} MB",
+  "voiceTtsSharedPackSize": "Kokoro · shared download · ~{size} MB",
   "@voiceTtsSharedPackSize": {
     "placeholders": {
       "size": {
@@ -851,7 +851,7 @@
       }
     }
   },
-  "voiceTtsPiperPackSize": "Smaller download · ~{size} MB",
+  "voiceTtsPiperPackSize": "Piper voice · smaller download · ~{size} MB",
   "@voiceTtsPiperPackSize": {
     "placeholders": {
       "size": {
@@ -3243,6 +3243,10 @@
   "remoteAccessTurnOnFailed": "Couldn't turn on Remote Access. Try again.",
   "@remoteAccessTurnOnFailed": {
     "description": "SnackBar when turning Remote Access on failed."
+  },
+  "remoteAccessTurnOff": "Turn off Remote Access",
+  "@remoteAccessTurnOff": {
+    "description": "Button on the \"Can't reach your Mac\" chat banner while Remote Access is on: turns it off (keeps the pairing)."
   },
   "remoteAccessTurnOffFailed": "Couldn't turn off Remote Access. Try again.",
   "@remoteAccessTurnOffFailed": {

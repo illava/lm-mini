@@ -144,4 +144,65 @@ void main() {
       expect(copy.maxTokens, 1024);
     });
   });
+
+  group('MCP tools for Shortcuts', () {
+    AppSettings lms({bool tools = true, String? token = 'tok', bool usb = false}) =>
+        AppSettings(
+          serverUrl: 'http://192.168.1.5:1234',
+          selectedModel: 'gemma',
+          apiToken: token,
+          enableToolUse: tools,
+          usbModeEnabled: usb,
+          integratedMcps: [IntegratedMcpConfig(name: 'web-search')],
+          mcpServers: [
+            McpServerConfig(label: 'web-search', url: 'https://a.example/mcp'),
+            McpServerConfig(label: 'weather', url: 'https://w.example/mcp'),
+          ],
+        );
+
+    test('LM Studio with tools on uses /api/v1/chat with the MCP list', () {
+      final snap = SiriInferenceSnapshot.from(settings: lms());
+      expect(snap.usesTools, isTrue);
+      expect(snap.toolsChatUrl, 'http://192.168.1.5:1234/api/v1/chat');
+      // Configured tool first; the same-named URL tool is skipped.
+      expect(snap.integrations, [
+        {'type': 'plugin', 'id': 'mcp/web-search'},
+        containsPair('server_label', 'weather'),
+      ]);
+      expect(snap.chatUrl, 'http://192.168.1.5:1234/v1/chat/completions');
+    });
+
+    test('tools off, or no tools configured: plain completion only', () {
+      expect(SiriInferenceSnapshot.from(settings: lms(tools: false)).usesTools,
+          isFalse);
+      final none = SiriInferenceSnapshot.from(
+        settings: AppSettings(
+          serverUrl: 'http://192.168.1.5:1234',
+          selectedModel: 'gemma',
+          enableToolUse: true,
+        ),
+      );
+      expect(none.usesTools, isFalse);
+      expect(none.toMap().containsKey('integrations'), isFalse);
+    });
+
+    test('no LM Studio token: configured tools need auth, URL tools stay', () {
+      final snap = SiriInferenceSnapshot.from(settings: lms(token: null));
+      expect(snap.integrations.length, 2);
+      expect(snap.integrations.every((m) => m['type'] == 'ephemeral_mcp'),
+          isTrue);
+    });
+
+    test('USB mode never uses the tools API', () {
+      expect(SiriInferenceSnapshot.from(settings: lms(usb: true)).usesTools,
+          isFalse);
+    });
+
+    test('tools survive the trip to the native side', () {
+      final snap = SiriInferenceSnapshot.from(settings: lms());
+      final back = SiriInferenceSnapshot.fromMap(snap.toMap());
+      expect(back.toolsChatUrl, snap.toolsChatUrl);
+      expect(back.integrations, snap.integrations);
+    });
+  });
 }

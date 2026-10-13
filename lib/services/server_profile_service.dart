@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:lm_mini_premium/lm_mini_premium.dart';
@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/app_settings.dart';
+import 'secret_store.dart';
 import '../models/server_profile.dart';
 
 /// Persists named server profiles and which one is active.
@@ -67,10 +68,10 @@ class ServerProfileService extends ChangeNotifier {
       final raw = prefs.getString(_profilesKey);
       if (raw != null && raw.isNotEmpty) {
         try {
-          final list = json.decode(raw) as List<dynamic>;
-          _profiles = list
-              .map((e) => ServerProfile.fromMap(e as Map<String, dynamic>))
-              .toList();
+          final list = await SecretStore.instance
+                  .loadList(prefs, _profilesKey, _secretFields) ??
+              const [];
+          _profiles = list.map(ServerProfile.fromMap).toList();
         } catch (e) {
           debugPrint('ServerProfileService: failed to parse profiles: $e');
           _profiles = [];
@@ -283,11 +284,17 @@ class ServerProfileService extends ChangeNotifier {
     }
   }
 
+  /// Kept in Keychain / Keystore (see [SecretStore]).
+  static const _secretFields = ['apiKey', 'customHeaders'];
+
   Future<void> _persist([SharedPreferences? prefs]) async {
     prefs ??= await SharedPreferences.getInstance();
-    final encoded =
-        json.encode(_profiles.map((p) => p.toMap()).toList(growable: false));
-    await prefs.setString(_profilesKey, encoded);
+    await SecretStore.instance.saveList(
+      prefs,
+      _profilesKey,
+      [for (final p in _profiles) p.toMap()],
+      _secretFields,
+    );
     if (_activeId == null) {
       await prefs.remove(_activeKey);
     } else {
@@ -383,6 +390,33 @@ class ServerProfileService extends ChangeNotifier {
     await _persist();
     notifyListeners();
     return _profiles[i];
+  }
+
+  /// Re-point the active tick at whatever the app is really using (e.g.
+  /// after losing Pro moved chat off a paid cloud server).
+  ///
+  /// Leaves a still-valid tick alone: re-inferring would pick the *first*
+  /// LM Studio profile, not the one in use. It only moves off a profile
+  /// that is gone, locked (Pro lapsed), or no longer the active kind.
+  void syncActiveFromSettings(AppSettings settings, CloudApiService cloud) {
+    if (!_loaded) return;
+    final current = _activeId == null ? null : byId(_activeId!);
+    if (current != null) {
+      final locked = current.isPremium && !SubscriptionService().isPremium;
+      final kindMatches = switch (current.kind) {
+        ServerProfileKind.cloud =>
+          current.cloudType?.providerKind == settings.activeProviderKind,
+        ServerProfileKind.lmStudio =>
+          settings.activeProviderKind == 'lmStudio' && !settings.usbModeEnabled,
+        _ => true,
+      };
+      if (!locked && kindMatches) return;
+    }
+    final id = _inferActiveId(settings, cloud);
+    if (id == _activeId) return;
+    _activeId = id;
+    unawaited(_persist());
+    notifyListeners();
   }
 
   ServerProfile? byId(String id) {

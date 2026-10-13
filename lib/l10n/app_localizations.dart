@@ -3865,7 +3865,7 @@ abstract class AppLocalizations {
   /// No description provided for @voiceTtsLanguagePacksHint.
   ///
   /// In en, this message translates to:
-  /// **'English, Spanish, French, and Chinese share one download (~400 MB). German and Russian are smaller (~34 MB each).'**
+  /// **'English, Spanish, French, and Chinese share one Kokoro download (~400 MB). German and Russian use smaller Piper voices (~34 MB each).'**
   String get voiceTtsLanguagePacksHint;
 
   /// No description provided for @voiceTtsLanguagePacks.
@@ -3895,13 +3895,13 @@ abstract class AppLocalizations {
   /// No description provided for @voiceTtsSharedPackSize.
   ///
   /// In en, this message translates to:
-  /// **'Shared download · ~{size} MB'**
+  /// **'Kokoro · shared download · ~{size} MB'**
   String voiceTtsSharedPackSize(int size);
 
   /// No description provided for @voiceTtsPiperPackSize.
   ///
   /// In en, this message translates to:
-  /// **'Smaller download · ~{size} MB'**
+  /// **'Piper voice · smaller download · ~{size} MB'**
   String voiceTtsPiperPackSize(int size);
 
   /// No description provided for @voiceTtsSharedPackDeleteMessage.
@@ -13067,6 +13067,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t turn on Remote Access. Try again.'**
   String get remoteAccessTurnOnFailed;
+
+  /// Button on the "Can't reach your Mac" chat banner while Remote Access is on: turns it off (keeps the pairing).
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off Remote Access'**
+  String get remoteAccessTurnOff;
 
   /// SnackBar when turning Remote Access off failed.
   ///

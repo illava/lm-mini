@@ -3,7 +3,7 @@ description: "A companion app for LM Studio, Ollama and oMLX that lets you chat 
 
 publish_to: 'none'
 
-version: 1.10.2+147
+version: 1.10.3+150
 
 environment:
   sdk: '>=3.6.0 <4.0.0'
@@ -19,6 +19,9 @@ dependencies:
   # Wi-Fi / cellular / offline awareness for LAN server preflight.
   connectivity_plus: ^6.1.5
   shared_preferences: ^2.2.2
+  # API keys / tokens in Keychain (iOS) and Keystore (Android). 9.2.x builds
+  # with AGP 8.7 (see connectivity_plus note).
+  flutter_secure_storage: 9.2.4
   sqflite: ^2.3.0
   path: ^1.8.3
   json_annotation: ^4.8.1

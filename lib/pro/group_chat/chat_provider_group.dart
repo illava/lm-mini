@@ -4,6 +4,13 @@ part of '../../providers/chat_provider.dart';
 /// Open-source build: group chat replies are not included. Group
 /// conversations stay viewable; every Pro entry point is a no-op.
 extension _ProGroupChat on ChatProvider {
+  AppSettings _proDebugSettingsForParticipantTurn({
+    required AppSettings routedGlobal,
+    required GroupChatParticipant participant,
+    required String kind,
+  }) =>
+      routedGlobal;
+
   Future<void> _proSendGroupMessage(
       String content, AppSettings settings, List<String>? imageUrls,
       {String? userDisplayContent, String? memoryContext}) async {

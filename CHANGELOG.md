@@ -2,6 +2,23 @@
 
 All notable changes to LM Mini will be documented in this file.
 
+## [1.10.2] - 2026-10-11
+
+**Remote Access switch & clearer connection errors**
+
+- Added a Remote Access on/off switch
+- Added Tap to retry on messages that didn't send
+- Added a mobile data notice when your server only works on Wi-Fi
+- Improved connection errors
+- Improved memories
+- Fixes Pro Search answering without searching when image generation is on
+- Fixes on-device models crashing when the app goes to the background
+- Fixes Kokoro voice crashes, and blocks a voice pack that keeps failing to load
+- Fixes on-device models and voice crashing on older Android phones
+- Fixes Switch provider opening the model list instead of your providers
+- Fixes a failed send leaving the chat stuck on sending
+- Fixes your LM Studio custom headers and Cloudflare Access secret being sent to cloud providers and image servers
+
 ## [1.9.13] - 2026-10-01
 
 **Apple Watch & Shortcuts**

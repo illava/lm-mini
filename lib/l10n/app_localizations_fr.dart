@@ -2084,7 +2084,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get voiceTtsLanguagePacksHint =>
-      'L’anglais, l’espagnol, le français et le chinois partagent un téléchargement (~400 Mo). L’allemand et le russe sont plus petits (~34 Mo).';
+      'L’anglais, l’espagnol, le français et le chinois partagent un téléchargement Kokoro (~400 Mo). L’allemand et le russe utilisent des voix Piper plus légères (~34 Mo).';
 
   @override
   String get voiceTtsLanguagePacks => 'Packs de voix';
@@ -2105,12 +2105,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String voiceTtsSharedPackSize(int size) {
-    return 'Téléchargement partagé · ~$size Mo';
+    return 'Kokoro · téléchargement partagé · ~$size Mo';
   }
 
   @override
   String voiceTtsPiperPackSize(int size) {
-    return 'Téléchargement plus petit · ~$size Mo';
+    return 'Voix Piper · téléchargement plus petit · ~$size Mo';
   }
 
   @override
@@ -7412,6 +7412,9 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get remoteAccessTurnOnFailed =>
       'Impossible d’activer l’accès à distance. Réessaie.';
+
+  @override
+  String get remoteAccessTurnOff => 'Désactiver l’accès à distance';
 
   @override
   String get remoteAccessTurnOffFailed =>

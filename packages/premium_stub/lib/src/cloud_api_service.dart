@@ -11,16 +11,76 @@ const _providersKey = 'cloud_api_providers';
 const _activeProviderKey = 'cloud_api_active_id';
 
 /// Normalizes a user-entered server URL for OpenAI-compatible providers.
-String normalizeCloudBaseUrl(String url) {
+///
+/// A missing scheme becomes `https://` for public hosts (an API key must not
+/// go out in cleartext) and `http://` for this machine / the LAN / VPN.
+/// With [stripVersionSuffix] a pasted `…/v1` (or `…/v1/chat/completions`,
+/// `…/v1/models`) is cut back to the base, since requests append `/v1/…`
+/// themselves — otherwise they went to `/v1/v1/…` and 404'd.
+String normalizeCloudBaseUrl(String url, {bool stripVersionSuffix = false}) {
   var trimmed = url.trim();
   if (trimmed.isEmpty) return trimmed;
   if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-    trimmed = 'http://$trimmed';
+    trimmed = '${_isPublicHost(trimmed) ? 'https' : 'http'}://$trimmed';
   }
   while (trimmed.endsWith('/')) {
     trimmed = trimmed.substring(0, trimmed.length - 1);
   }
+  if (stripVersionSuffix) {
+    trimmed = trimmed.replaceFirst(
+      RegExp(r'/v1(/chat/completions|/completions|/models)?$',
+          caseSensitive: false),
+      '',
+    );
+  }
   return trimmed;
+}
+
+/// True unless the host (of a scheme-less "host[:port][/path]") is
+/// localhost, a private / link-local / CGNAT (Tailscale) IP, a bare
+/// single-label name, or a local-only suffix.
+bool _isPublicHost(String schemeless) {
+  final uri = Uri.tryParse('http://$schemeless');
+  final host = (uri?.host ?? '').toLowerCase();
+  if (host.isEmpty) return false;
+  if (host == 'localhost' || !host.contains('.') && !host.contains(':')) {
+    return false;
+  }
+  for (final suffix in const [
+    '.local',
+    '.lan',
+    '.home',
+    '.internal',
+    '.localhost',
+    '.ts.net',
+    '.home.arpa', // RFC 8375 home networks
+    '.fritz.box', // FRITZ!Box routers
+    '.localdomain',
+    '.intranet',
+    '.corp',
+    '.private',
+  ]) {
+    if (host.endsWith(suffix)) return false;
+  }
+  final parts = host.split('.');
+  if (parts.length == 4 && parts.every((p) => int.tryParse(p) != null)) {
+    final a = int.parse(parts[0]);
+    final b = int.parse(parts[1]);
+    if (a == 10 || a == 127 || a == 0) return false;
+    if (a == 192 && b == 168) return false;
+    if (a == 172 && b >= 16 && b <= 31) return false;
+    if (a == 169 && b == 254) return false;
+    if (a == 100 && b >= 64 && b <= 127) return false; // CGNAT / Tailscale
+    return true;
+  }
+  if (host.contains(':')) {
+    // IPv6 literal: loopback, unique-local and link-local stay on http.
+    return !(host == '::1' ||
+        host.startsWith('fc') ||
+        host.startsWith('fd') ||
+        host.startsWith('fe80'));
+  }
+  return true;
 }
 
 /// Hosted OpenAI Chat Completions (`api.openai.com`), not Azure or docs sites.
@@ -45,7 +105,20 @@ CloudApiType? effectiveChatApiType(CloudApiType? type, String? baseUrl) {
 }
 
 /// Manages API keys and configurations for cloud LLM providers.
+/// Optional persistence override for the provider list. The app sets this
+/// to keep API keys and auth headers in the Keychain / Keystore; when it is
+/// null the list is stored in SharedPreferences as before.
+class CloudProviderPersistence {
+  const CloudProviderPersistence({required this.read, required this.write});
+
+  /// Stored provider maps, or null when nothing is stored.
+  final Future<List<Map<String, dynamic>>?> Function() read;
+  final Future<void> Function(List<Map<String, dynamic>> items) write;
+}
+
 class CloudApiService extends ChangeNotifier {
+  static CloudProviderPersistence? persistence;
+
   static final CloudApiService _instance = CloudApiService._internal();
   factory CloudApiService() => _instance;
   CloudApiService._internal();
@@ -73,12 +146,16 @@ class CloudApiService extends ChangeNotifier {
 
   bool get isCloudActive => _activeProviderId != null && activeProvider != null;
 
-  Future<void> load() async {
+  /// [force] re-reads storage (e.g. after keys became readable again).
+  Future<void> load({bool force = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_providersKey);
-    if (raw != null && raw.isNotEmpty) {
+    final store = persistence;
+    final raw = store != null ? null : prefs.getString(_providersKey);
+    if (store != null || (raw != null && raw.isNotEmpty)) {
       try {
-        final list = json.decode(raw) as List<dynamic>;
+        final list = store != null
+            ? (await store.read() ?? const <Map<String, dynamic>>[])
+            : json.decode(raw!) as List<dynamic>;
         _providers = list
             .map((e) => CloudApiProvider.fromMap(e as Map<String, dynamic>))
             .toList();
@@ -95,7 +172,10 @@ class CloudApiService extends ChangeNotifier {
     final normalized = provider.copyWith(
       baseUrl: provider.baseUrl == null || provider.baseUrl!.trim().isEmpty
           ? provider.baseUrl
-          : normalizeCloudBaseUrl(provider.baseUrl!),
+          : normalizeCloudBaseUrl(
+              provider.baseUrl!,
+              stripVersionSuffix: provider.type.chatPath.startsWith('/v1/'),
+            ),
     );
     final index = _providers.indexWhere((p) => p.id == normalized.id);
     if (index >= 0) {
@@ -472,9 +552,13 @@ class CloudApiService extends ChangeNotifier {
 
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
-    final encoded =
-        json.encode(_providers.map((p) => p.toMap()).toList(growable: false));
-    await prefs.setString(_providersKey, encoded);
+    final items = _providers.map((p) => p.toMap()).toList(growable: false);
+    final store = persistence;
+    if (store != null) {
+      await store.write(items);
+    } else {
+      await prefs.setString(_providersKey, json.encode(items));
+    }
     if (_activeProviderId == null) {
       await prefs.remove(_activeProviderKey);
     } else {
@@ -576,7 +660,10 @@ class CloudApiProvider {
     final raw = (baseUrl != null && baseUrl!.isNotEmpty)
         ? baseUrl!
         : type.defaultBaseUrl;
-    final normalized = normalizeCloudBaseUrl(raw);
+    final normalized = normalizeCloudBaseUrl(
+      raw,
+      stripVersionSuffix: type.chatPath.startsWith('/v1/'),
+    );
     if (isHostedOpenAiBaseUrl(normalized)) {
       return 'https://api.openai.com';
     }

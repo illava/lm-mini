@@ -5,11 +5,15 @@ import '../models/app_settings.dart';
 class ServerModelMemory {
   ServerModelMemory._();
 
-  static String keyFor(AppSettings settings) => key(
+  /// [cloudProviderId] is the active Ollama / oMLX / JAN / Unsloth / cloud
+  /// provider: each one remembers its own model (two Ollama servers, or
+  /// OpenAI vs Mistral, must not share a slot).
+  static String keyFor(AppSettings settings, {String? cloudProviderId}) => key(
         providerKind: settings.activeProviderKind,
         isRemoteActive: settings.isRemoteActive,
         usbModeEnabled: settings.usbModeEnabled,
         serverUrl: settings.serverUrl,
+        cloudProviderId: cloudProviderId,
       );
 
   /// Stable slot id. Remote backends share the relay URL, so they key by
@@ -19,6 +23,7 @@ class ServerModelMemory {
     required bool isRemoteActive,
     required bool usbModeEnabled,
     required String serverUrl,
+    String? cloudProviderId,
   }) {
     if (providerKind == 'onDeviceGguf' ||
         providerKind == 'onDeviceMlx' ||
@@ -39,7 +44,8 @@ class ServerModelMemory {
         providerKind == 'jan' ||
         providerKind == 'unsloth' ||
         providerKind == 'cloud') {
-      return 'cloud:$providerKind';
+      final id = cloudProviderId?.trim() ?? '';
+      return id.isEmpty ? 'cloud:$providerKind' : 'cloud:$providerKind:$id';
     }
     final url = serverUrl.trim();
     return 'local:${url.isEmpty ? 'lmStudio' : url}';

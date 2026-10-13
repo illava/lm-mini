@@ -2051,7 +2051,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceTtsLanguagePacksHint =>
-      'English, Spanish, French, and Chinese share one download (~400 MB). German and Russian are smaller (~34 MB each).';
+      'English, Spanish, French, and Chinese share one Kokoro download (~400 MB). German and Russian use smaller Piper voices (~34 MB each).';
 
   @override
   String get voiceTtsLanguagePacks => 'Voice packs';
@@ -2072,12 +2072,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String voiceTtsSharedPackSize(int size) {
-    return 'Shared download · ~$size MB';
+    return 'Kokoro · shared download · ~$size MB';
   }
 
   @override
   String voiceTtsPiperPackSize(int size) {
-    return 'Smaller download · ~$size MB';
+    return 'Piper voice · smaller download · ~$size MB';
   }
 
   @override
@@ -7307,6 +7307,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get remoteAccessTurnOnFailed =>
       'Couldn\'t turn on Remote Access. Try again.';
+
+  @override
+  String get remoteAccessTurnOff => 'Turn off Remote Access';
 
   @override
   String get remoteAccessTurnOffFailed =>

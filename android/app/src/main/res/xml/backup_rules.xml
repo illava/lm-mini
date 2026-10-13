@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and lower. Everything is backed up except the secure-storage
+     file: its values are encrypted with a Keystore key that never leaves this
+     phone, so a restored copy can't be read anyway. API keys and tokens are no
+     longer in FlutterSharedPreferences.xml (see lib/services/secret_store.dart). -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+</full-backup-content>

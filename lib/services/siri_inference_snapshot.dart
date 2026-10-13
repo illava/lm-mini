@@ -27,6 +27,15 @@ class SiriInferenceSnapshot {
   final int maxTokens;
   final String? ineligibleReason;
 
+  /// LM Studio's own chat API (`/api/v1/chat`). Set only when the user's MCP
+  /// tools are on: the OpenAI-compatible [chatUrl] can't run MCP tools, so a
+  /// Shortcut asking for news or weather had no web search.
+  final String? toolsChatUrl;
+
+  /// MCP tools for [toolsChatUrl], in LM Studio's `integrations` format
+  /// (same list in-app chat sends, without Pro Search).
+  final List<Map<String, dynamic>> integrations;
+
   const SiriInferenceSnapshot({
     required this.eligible,
     required this.providerKind,
@@ -36,7 +45,23 @@ class SiriInferenceSnapshot {
     this.temperature = 0.7,
     this.maxTokens = 512,
     this.ineligibleReason,
+    this.toolsChatUrl,
+    this.integrations = const [],
   });
+
+  /// The user's MCP tools as LM Studio `integrations`, matching in-app chat:
+  /// LM Studio-configured (mcp.json) tools first, then URL tools, skipping a
+  /// URL tool that has the same name as a configured one.
+  static List<Map<String, dynamic>> mcpIntegrations(AppSettings settings) {
+    if (!settings.enableToolUse) return const [];
+    final integrated = settings.activeIntegratedMcps;
+    final names = integrated.map((m) => m.name).toSet();
+    return [
+      for (final m in integrated) m.toApiFormat(),
+      for (final s in settings.activeMcpServers)
+        if (!names.contains(s.label)) s.toApiFormat(),
+    ];
+  }
 
   factory SiriInferenceSnapshot.from({
     required AppSettings settings,
@@ -70,6 +95,8 @@ class SiriInferenceSnapshot {
     };
 
     String? chatUrl;
+    String? toolsChatUrl;
+    var integrations = const <Map<String, dynamic>>[];
     String? model = settings.selectedModel?.trim();
 
     if (cloud != null &&
@@ -97,6 +124,14 @@ class SiriInferenceSnapshot {
         );
       }
       chatUrl = _joinUrl(base, '/v1/chat/completions');
+      // MCP tools only run through LM Studio's own API (not Home's
+      // llama-server or the USB bridge).
+      if (kind == 'lmStudio' && !settings.usbModeEnabled) {
+        integrations = mcpIntegrations(settings);
+        if (integrations.isNotEmpty) {
+          toolsChatUrl = _joinUrl(base, '/api/v1/chat');
+        }
+      }
       final token = settings.apiToken?.trim();
       if (token != null && token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $token';
@@ -167,8 +202,12 @@ class SiriInferenceSnapshot {
       headers: Map.unmodifiable(headers),
       temperature: settings.temperature,
       maxTokens: maxTokens,
+      toolsChatUrl: toolsChatUrl,
+      integrations: integrations,
     );
   }
+
+  bool get usesTools => toolsChatUrl != null && integrations.isNotEmpty;
 
   Map<String, dynamic> toMap() => {
         'eligible': eligible,
@@ -179,6 +218,8 @@ class SiriInferenceSnapshot {
         'temperature': temperature,
         'maxTokens': maxTokens,
         'ineligibleReason': ineligibleReason,
+        if (toolsChatUrl != null) 'toolsChatUrl': toolsChatUrl,
+        if (integrations.isNotEmpty) 'integrations': integrations,
       };
 
   factory SiriInferenceSnapshot.fromMap(Map<String, dynamic> map) {
@@ -198,6 +239,11 @@ class SiriInferenceSnapshot {
       temperature: (map['temperature'] as num?)?.toDouble() ?? 0.7,
       maxTokens: (map['maxTokens'] as num?)?.toInt() ?? 512,
       ineligibleReason: map['ineligibleReason'] as String?,
+      toolsChatUrl: map['toolsChatUrl'] as String?,
+      integrations: [
+        for (final e in (map['integrations'] as List?) ?? const [])
+          if (e is Map) Map<String, dynamic>.from(e),
+      ],
     );
   }
 

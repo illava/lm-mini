@@ -39,6 +39,7 @@ import '../models/chat_conversation.dart';
 import '../models/memory_category.dart';
 import '../models/message_stats.dart';
 import '../models/file_attachment.dart';
+import '../services/usb_bridge_service.dart';
 import '../services/database_service.dart';
 import '../services/generated_image_library_service.dart';
 import '../models/generated_image_library_item.dart';
@@ -7242,7 +7243,10 @@ class ChatProvider with ChangeNotifier {
       }
       // Headers follow these (cloud-patched) settings, not whatever the
       // shared client was last configured with.
-      RemoteHostBackends.configureLmStudioClient(_lmStudioService, settings);
+      // Own client: re-configuring the shared one here could hand these
+      // headers to a cloud chat between its tool-loop requests.
+      final jobClient = LMStudioService();
+      RemoteHostBackends.configureLmStudioClient(jobClient, settings);
 
       String raw;
       if (isOnDevice) {
@@ -7287,7 +7291,7 @@ class ChatProvider with ChangeNotifier {
         final contentBuffer = StringBuffer();
         final reasoningBuffer = StringBuffer();
         final cp = _resolveEffectiveCloudProvider(settings: settings);
-        await for (final event in _lmStudioService.streamChatCompletion(
+        await for (final event in jobClient.streamChatCompletion(
           baseUrl: settings.serverUrl,
           formattedMessages: messages,
           settings: titleSettings,
@@ -7312,7 +7316,7 @@ class ChatProvider with ChangeNotifier {
         if (raw.trim().isEmpty) raw = reasoningBuffer.toString();
       } else {
         // Local LM Studio: non-streaming one-shot after the main SSE is idle.
-        final result = await _lmStudioService.getChatCompletion(
+        final result = await jobClient.getChatCompletion(
           baseUrl: settings.serverUrl,
           messages: [
             ChatMessage(
@@ -7490,7 +7494,29 @@ class ChatProvider with ChangeNotifier {
     OnDeviceLLMService.instance.cancelActive();
     LMStudioService.cancelAllActiveStreams();
     OllamaService.cancelAllActiveStreams();
+    UsbBridgeService.instance.cancelGenerations();
     return true;
+  }
+
+  /// Tests only: group-chat participant routing.
+  @visibleForTesting
+  AppSettings debugSettingsForParticipantTurn({
+    required AppSettings routedGlobal,
+    required GroupChatParticipant participant,
+    required String kind,
+    SettingsProvider? settingsProvider,
+  }) {
+    final saved = _activeSettingsProvider;
+    _activeSettingsProvider = settingsProvider;
+    try {
+      return _proDebugSettingsForParticipantTurn(
+        routedGlobal: routedGlobal,
+        participant: participant,
+        kind: kind,
+      );
+    } finally {
+      _activeSettingsProvider = saved;
+    }
   }
 
   /// Stop ongoing generation
@@ -7517,6 +7543,8 @@ class ChatProvider with ChangeNotifier {
     // connection is the documented way to interrupt generation on both.
     LMStudioService.cancelAllActiveStreams();
     OllamaService.cancelAllActiveStreams();
+    // USB: tell the Mac to stop too (the local hop can't signal it alone).
+    UsbBridgeService.instance.cancelGenerations();
 
     // Remove any temp messages
     _currentMessages.removeWhere((m) => m.id.startsWith('temp_'));

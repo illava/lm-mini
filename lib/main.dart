@@ -17,6 +17,7 @@ import 'screens/providers_screen.dart';
 import 'widgets/network_status_banner.dart';
 import 'screens/splash_screen.dart';
 import 'screens/welcome_wizard_screen.dart';
+import 'services/secret_store.dart';
 import 'services/deep_link_service.dart';
 import 'services/watch_bridge.dart';
 import 'services/download_progress_activity.dart';
@@ -85,6 +86,8 @@ void main() async {
     } catch (_) {}
   });
   _installErrorHandlers();
+  // Keys and tokens live in Keychain / Keystore on iOS and Android.
+  SecretStore.instance.installCloudProviderPersistence();
 
   // Wi‑Fi / mobile / offline awareness for LAN chat preflight. Never blocks
   // startup; on plugin errors the service stays "unknown" (= online).
@@ -480,7 +483,11 @@ class _AppInitializerState extends State<AppInitializer>
       unawaited(NetworkStatusService.instance.refresh());
       // Restore remote LM Connect if it dropped while backgrounded.
       if (mounted) {
-        unawaited(context.read<SettingsProvider>().onAppResumed());
+        final sp = context.read<SettingsProvider>();
+        unawaited(sp
+            .recoverSecretsIfNeeded()
+            .catchError((Object e) => debugPrint('Key recovery failed: $e'))
+            .whenComplete(sp.onAppResumed));
       }
       if (DesktopPlatform.supportsHostMode) {
         final fromSuspend = _desktopHostWasSuspended;

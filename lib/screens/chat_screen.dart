@@ -1324,6 +1324,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                               _openProviders(context),
                                           onGoToModels: () =>
                                               _openModelManagement(context),
+                                          onTurnOffRemote: () =>
+                                              _turnOffRemoteAccess(
+                                            context,
+                                            settingsProvider,
+                                            chatProvider,
+                                          ),
                                           onAdjustMaxTokens: () =>
                                               _openModelParameters(context),
                                           onOpenImageSettings: () =>
@@ -2530,6 +2536,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   /// "Switch provider": the full servers / providers list (same screen as
   /// Settings → More servers), not the model picker.
+  /// "Can't reach your Mac" → Turn off Remote Access (keeps the pairing, so
+  /// the Remote Access switch in Settings turns it straight back on).
+  Future<void> _turnOffRemoteAccess(
+    BuildContext context,
+    SettingsProvider settingsProvider,
+    ChatProvider chatProvider,
+  ) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final failed = AppLocalizations.of(context).remoteAccessTurnOffFailed;
+    try {
+      await settingsProvider.deactivateRemoteAccess();
+      ServerReachability.clearCache();
+      settingsProvider.clearConnectionError();
+      chatProvider.clearError();
+    } catch (e) {
+      debugPrint('Turn off Remote Access failed: $e');
+      messenger?.showSnackBar(SnackBar(content: Text(failed)));
+    }
+  }
+
   Future<void> _openProviders(BuildContext context) async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const ProvidersScreen()),
@@ -3716,6 +3742,9 @@ class _ErrorBanner extends StatelessWidget {
   final VoidCallback? onSelectModel;
   final VoidCallback? onSwitchProvider;
   final VoidCallback? onGoToModels;
+
+  /// Remote Access is on but the paired computer isn't answering.
+  final VoidCallback? onTurnOffRemote;
   final VoidCallback? onAdjustMaxTokens;
   final VoidCallback? onOpenImageSettings;
   final VoidCallback? onCompressAndResend;
@@ -3734,6 +3763,7 @@ class _ErrorBanner extends StatelessWidget {
     this.onSelectModel,
     this.onSwitchProvider,
     this.onGoToModels,
+    this.onTurnOffRemote,
     this.onAdjustMaxTokens,
     this.onOpenImageSettings,
     this.onCompressAndResend,
@@ -3807,6 +3837,15 @@ class _ErrorBanner extends StatelessWidget {
         icon: Icons.phonelink_rounded,
         title: l10n.cantReachMacTitle,
         steps: [l10n.cantReachMacStep1, l10n.cantReachMacStep2],
+        actions: [
+          if (isRemoteActive && onTurnOffRemote != null)
+            _ErrorActionChip(
+              label: l10n.remoteAccessTurnOff,
+              icon: Icons.public_off_rounded,
+              color: Theme.of(context).colorScheme.primary,
+              onTap: onTurnOffRemote!,
+            ),
+        ],
         onDismiss: onDismiss,
       );
     }

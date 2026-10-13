@@ -24,8 +24,11 @@ import '../services/ollama_service.dart';
 import '../services/server_profile_service.dart';
 import '../services/settings_service.dart';
 import '../services/remote_access_service.dart';
+import '../services/secret_store.dart';
 import '../services/usb_bridge_service.dart';
 import '../utils/connect_host_error.dart';
+import '../utils/relay_url.dart';
+import '../utils/server_url.dart';
 import '../utils/lm_studio_download_cancel.dart';
 import '../utils/image_picker_helper.dart';
 import '../utils/app_navigator.dart';
@@ -53,6 +56,39 @@ part '../pro/remote_access/settings_provider_remote.dart';
 
 class SettingsProvider with ChangeNotifier {
   AppSettings _settings = AppSettings();
+
+  /// Siri runs from a snapshot of the server / model / keys. Every change
+  /// that notifies (and every provider edit) re-sends it after a short
+  /// debounce, instead of only the two code paths that used to.
+  Timer? _siriSyncTimer;
+  bool _siriCloudListenerAttached = false;
+
+  void _scheduleSiriSync() {
+    if (!SiriIntentBridge.isSupported) return;
+    _siriSyncTimer?.cancel();
+    _siriSyncTimer = Timer(const Duration(milliseconds: 400), () {
+      _siriSyncTimer = null;
+      unawaited(SiriIntentBridge.syncFromSettings(
+        _settings,
+        cloud: resolveCloudProvider(),
+      ));
+    });
+  }
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    _scheduleSiriSync();
+  }
+
+  @override
+  void dispose() {
+    _siriSyncTimer?.cancel();
+    if (_siriCloudListenerAttached) {
+      CloudApiService().removeListener(_scheduleSiriSync);
+    }
+    super.dispose();
+  }
   List<LMStudioModel> _availableModels = [];
   bool _isLoadingModels = false;
   bool _isTestingConnection = false;
@@ -537,6 +573,22 @@ class SettingsProvider with ChangeNotifier {
 
     // Load saved cloud credentials before premium restore / readiness checks.
     await CloudApiService().load();
+    if (!_siriCloudListenerAttached && SiriIntentBridge.isSupported) {
+      // Provider key / URL / model edits made outside this provider.
+      CloudApiService().addListener(_scheduleSiriSync);
+      _siriCloudListenerAttached = true;
+    }
+    // Repair: older versions could leave Ollama / oMLX / … pointing at the
+    // relay after Remote Access was turned off or unpaired.
+    if (!_settings.isRemoteActive) {
+      try {
+        await _restoreLocalProviderUrls(
+          legacyActiveBase: _settings.savedLocalCloudBaseUrl,
+        );
+      } catch (e) {
+        debugPrint('Local server URL repair failed: $e');
+      }
+    }
     await ServerProfileService.instance.load(
       settings: _settings,
       cloud: CloudApiService(),
@@ -613,7 +665,10 @@ class SettingsProvider with ChangeNotifier {
     }
 
     // Only revert the paid `'cloud'` umbrella kind — not ollama/omlx/lmStudio.
-    if (_settings.activeProviderKind != 'cloud') return;
+    if (_settings.activeProviderKind != 'cloud') {
+      ServerProfileService.instance.syncActiveFromSettings(_settings, cloud);
+      return;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final savedLocal = prefs.getString('saved_local_model');
@@ -625,6 +680,8 @@ class SettingsProvider with ChangeNotifier {
     if (savedLocal != null) {
       await prefs.remove('saved_local_model');
     }
+    // The paid server's tick must move to what chat now uses.
+    ServerProfileService.instance.syncActiveFromSettings(_settings, cloud);
     notifyListeners();
   }
 
@@ -648,9 +705,12 @@ class SettingsProvider with ChangeNotifier {
   Future<void> updateSettings(
     AppSettings newSettings, {
     bool keepOnDeviceEngineChoice = false,
+    String? fromSlot,
   }) async {
     final previousKind = _settings.activeProviderKind;
-    final fromKey = ServerModelMemory.keyFor(_settings);
+    // [fromSlot]: the caller already switched the active cloud provider
+    // (part of the slot key), so it passes the slot it is leaving.
+    final fromKey = fromSlot ?? _modelSlotKey();
     final fromModel = _settings.selectedModel;
     _settings = newSettings;
     if (_settings.activeProviderKind == 'onDeviceGguf' ||
@@ -662,13 +722,18 @@ class SettingsProvider with ChangeNotifier {
     }
     // Re-sync any service-side header state that depends on settings.
     _lmStudioService.customHeaders = _settings.effectiveExtraHeaders;
-    final toKey = ServerModelMemory.keyFor(_settings);
+    final toKey = _modelSlotKey();
     if (toKey != fromKey) {
       _rememberSelectedModel(key: fromKey, modelId: fromModel);
       final explicit = newSettings.selectedModel != fromModel
           ? newSettings.selectedModel
           : null;
-      _restoreSelectedModel(toKey, fallback: explicit);
+      // No slot yet (e.g. first time on this server): use the provider's own
+      // remembered model, never the previous server's.
+      _restoreSelectedModel(
+        toKey,
+        fallback: explicit ?? resolveCloudProvider()?.selectedModel,
+      );
     }
     await _settingsService.saveSettings(_settings);
     unawaited(SiriIntentBridge.syncFromSettings(
@@ -745,7 +810,7 @@ class SettingsProvider with ChangeNotifier {
           if (cp.type == CloudApiType.unsloth) {
             try {
               unslothStatus =
-                  await _lmStudioService.fetchUnslothInferenceStatus(
+                  await _unslothClient(cp).fetchUnslothInferenceStatus(
                 baseUrl: cp.effectiveBaseUrl,
                 apiToken: cp.apiKey.trim().isEmpty ? null : cp.apiKey,
               );
@@ -1134,7 +1199,7 @@ class SettingsProvider with ChangeNotifier {
 
     Map<String, dynamic>? status;
     try {
-      status = await _lmStudioService.fetchUnslothInferenceStatus(
+      status = await _unslothClient().fetchUnslothInferenceStatus(
         baseUrl: settings.serverUrl,
         apiToken: settings.apiToken,
       );
@@ -1148,7 +1213,7 @@ class SettingsProvider with ChangeNotifier {
 
     onLoading?.call();
     try {
-      await _lmStudioService.loadUnslothModel(
+      await _unslothClient().loadUnslothModel(
         baseUrl: settings.serverUrl,
         modelId: modelId,
         maxSeqLength: desired,
@@ -1176,7 +1241,7 @@ class SettingsProvider with ChangeNotifier {
     try {
       Map<String, dynamic>? status;
       try {
-        status = await _lmStudioService.fetchUnslothInferenceStatus(
+        status = await _unslothClient(cp).fetchUnslothInferenceStatus(
           baseUrl: cp.effectiveBaseUrl,
           apiToken: cp.apiKey,
         );
@@ -1222,7 +1287,7 @@ class SettingsProvider with ChangeNotifier {
 
       var ok = false;
       try {
-        await _lmStudioService.loadUnslothModel(
+        await _unslothClient(cp).loadUnslothModel(
           baseUrl: cp.effectiveBaseUrl,
           modelId: modelId,
           maxSeqLength: desired,
@@ -1452,7 +1517,7 @@ class SettingsProvider with ChangeNotifier {
     _loadingModelId = modelId;
     notifyListeners();
     try {
-      await _lmStudioService.loadUnslothModel(
+      await _unslothClient(cp).loadUnslothModel(
         baseUrl: cp.effectiveBaseUrl,
         modelId: modelId,
         maxSeqLength: desired > 0 ? desired : 0,
@@ -1504,7 +1569,7 @@ class SettingsProvider with ChangeNotifier {
       return false;
     }
     try {
-      await _lmStudioService.unloadUnslothModel(
+      await _unslothClient(cp).unloadUnslothModel(
         baseUrl: cp.effectiveBaseUrl,
         modelId: modelId,
         apiToken: cp.apiKey.trim().isEmpty ? null : cp.apiKey,
@@ -1611,12 +1676,15 @@ class SettingsProvider with ChangeNotifier {
   /// Switch the app to an already-saved profile.
   Future<bool> activateServerProfile(String id) async {
     final profiles = ServerProfileService.instance;
-    final profile = await profiles.markActive(id);
-    if (profile == null) return false;
-
-    if (profile.isPremium && !SubscriptionService().isPremium) {
+    // Check the lock before marking it active: a locked paid server used to
+    // get the tick while chat kept using the previous server.
+    final candidate = profiles.byId(id);
+    if (candidate == null) return false;
+    if (candidate.isPremium && !SubscriptionService().isPremium) {
       return false;
     }
+    final profile = await profiles.markActive(id);
+    if (profile == null) return false;
 
     // Leaving USB for any other server turns the bridge off first.
     if (!profile.isUsb && _settings.usbModeEnabled) {
@@ -1647,11 +1715,16 @@ class SettingsProvider with ChangeNotifier {
         await updateSettings(_settings.copyWith(
           activeProviderKind: 'lmStudio',
           serverUrl: profile.baseUrl?.trim().isNotEmpty == true
-              ? profile.baseUrl!.trim()
+              ? normalizeLmStudioBaseUrl(profile.baseUrl!)
               : _settings.serverUrl,
           apiToken: profile.apiKey?.isEmpty == true ? null : profile.apiKey,
           customRequestHeaders: profile.customHeaders,
           customHeadersEnabled: profile.customHeadersEnabled,
+          // The profile's headers are the source of truth (legacy CF fields
+          // were folded into them). Keeping the old CF id/secret would send
+          // the previous server's Cloudflare secret to this one.
+          cfAccessClientId: null,
+          cfAccessClientSecret: null,
         ));
         break;
 
@@ -1666,6 +1739,7 @@ class SettingsProvider with ChangeNotifier {
 
       case ServerProfileKind.cloud:
         if (profile.cloudType == null) return false;
+        final fromSlot = _modelSlotKey();
         final existing =
             cloud.providers.where((p) => p.id == profile.id).firstOrNull;
         await cloud.saveProvider(CloudApiProvider(
@@ -1679,11 +1753,29 @@ class SettingsProvider with ChangeNotifier {
           customHeaders: profile.customHeaders ?? existing?.customHeaders,
           customHeadersEnabled: profile.customHeadersEnabled,
         ));
+        // Remember the outgoing server's model under its own slot before the
+        // active provider (part of the slot key) changes.
+        _rememberSelectedModel(
+          key: fromSlot,
+          modelId: _settings.selectedModel,
+        );
         await cloud.setActiveProvider(profile.id);
-        await updateSettings(_settings.copyWith(
-          activeProviderKind: profile.cloudType!.providerKind,
-          selectedModel: existing?.selectedModel ?? _settings.selectedModel,
-        ));
+        final toSlot = ServerModelMemory.keyFor(
+          _settings.copyWith(
+            activeProviderKind: profile.cloudType!.providerKind,
+          ),
+          cloudProviderId: profile.id,
+        );
+        await updateSettings(
+          _settings.copyWith(
+            activeProviderKind: profile.cloudType!.providerKind,
+            // This server's own model only: inheriting the previous one sent
+            // e.g. a gpt-… id to Mistral.
+            selectedModel: _settings.selectedModelByServer[toSlot] ??
+                existing?.selectedModel,
+          ),
+          fromSlot: fromSlot,
+        );
         break;
     }
 
@@ -1827,6 +1919,17 @@ class SettingsProvider with ChangeNotifier {
     if (!SubscriptionService().isPremium) return;
     await _proActivateRemoteAccess(info);
   }
+
+  /// Tests only: [activateRemoteAccess] without the Pro check.
+  @visibleForTesting
+  Future<void> debugActivateRemoteAccess(RemoteConnectionInfo info) =>
+      _proActivateRemoteAccess(info);
+
+  /// Tests only: the startup repair of local servers left on the relay.
+  @visibleForTesting
+  Future<void> debugRestoreLocalProviderUrls() => _restoreLocalProviderUrls(
+        legacyActiveBase: _settings.savedLocalCloudBaseUrl,
+      );
 
   /// Re-enable an already-paired remote session without re-parsing a QR.
   Future<void> reactivateRemoteAccess() async {
@@ -2053,7 +2156,7 @@ class SettingsProvider with ChangeNotifier {
     _remoteHealthPausedForBackground = false;
     final localUrl = _settings.savedLocalServerUrl ?? 'http://localhost:1234';
     final savedCloudBase = _settings.savedLocalCloudBaseUrl;
-    final fromKey = ServerModelMemory.keyFor(_settings);
+    final fromKey = _modelSlotKey();
     final fromModel = _settings.selectedModel;
 
     _settings = _settings.copyWith(
@@ -2062,15 +2165,10 @@ class SettingsProvider with ChangeNotifier {
       remoteAutoReconnect: userInitiated ? false : true,
     );
     _rememberSelectedModel(key: fromKey, modelId: fromModel);
-    _restoreSelectedModel(ServerModelMemory.keyFor(_settings));
+    _restoreSelectedModel(_modelSlotKey());
     _syncRemoteAuthToken();
-    if (savedCloudBase != null && savedCloudBase.isNotEmpty) {
-      final cloud = CloudApiService();
-      final cp = resolveCloudProvider(cloud);
-      if (cp != null && cp.type.isFreeLocalServer) {
-        await cloud.saveProvider(cp.copyWith(baseUrl: savedCloudBase));
-      }
-    }
+    // Keep the saved LAN URLs: turning Remote back on rebinds and re-saves.
+    await _restoreLocalProviderUrls(legacyActiveBase: savedCloudBase);
 
     await _settingsService.saveSettings(_settings);
     notifyListeners();
@@ -2092,6 +2190,18 @@ class SettingsProvider with ChangeNotifier {
     _consecutiveHealthFailures = 0;
   }
 
+  /// The app started where the Keychain was not readable yet (a background
+  /// launch before the first unlock), so keys were loaded without their
+  /// secrets. Once readable, reload settings, servers and providers.
+  Future<void> recoverSecretsIfNeeded() async {
+    final store = SecretStore.instance;
+    if (!store.hasDegraded) return;
+    if (!await store.retryDegraded()) return;
+    debugPrint('🔐 Keys readable again — reloading settings');
+    await CloudApiService().load(force: true);
+    await loadSettings();
+  }
+
   /// Re-verify (or restore) the remote LM Studio connection when the app
   /// returns to the foreground.
   Future<void> onAppResumed() async {
@@ -2107,16 +2217,10 @@ class SettingsProvider with ChangeNotifier {
     _consecutiveHealthFailures = 0;
     final localUrl = _settings.savedLocalServerUrl ?? _settings.serverUrl;
     final savedCloudBase = _settings.savedLocalCloudBaseUrl;
-    final fromKey = ServerModelMemory.keyFor(_settings);
+    final fromKey = _modelSlotKey();
     final fromModel = _settings.selectedModel;
 
-    if (savedCloudBase != null && savedCloudBase.isNotEmpty) {
-      final cloud = CloudApiService();
-      final cp = resolveCloudProvider(cloud);
-      if (cp != null && cp.type.isFreeLocalServer) {
-        await cloud.saveProvider(cp.copyWith(baseUrl: savedCloudBase));
-      }
-    }
+    await _restoreLocalProviderUrls(legacyActiveBase: savedCloudBase);
 
     _settings = _settings.copyWith(
       remoteServerUrl: null,
@@ -2126,6 +2230,7 @@ class SettingsProvider with ChangeNotifier {
       remoteLastConnected: null,
       savedLocalServerUrl: null,
       savedLocalCloudBaseUrl: null,
+      savedLocalProviderBaseUrls: const {},
       remoteConnectVersion: null,
       remoteBackends: const [],
       remoteEncryptionKey: null,
@@ -2137,7 +2242,7 @@ class SettingsProvider with ChangeNotifier {
       serverUrl: localUrl,
     );
     _rememberSelectedModel(key: fromKey, modelId: fromModel);
-    _restoreSelectedModel(ServerModelMemory.keyFor(_settings));
+    _restoreSelectedModel(_modelSlotKey());
     _syncRemoteAuthToken();
     _remoteReachable = {};
     _remoteKokoroReady = false;
@@ -2146,6 +2251,59 @@ class SettingsProvider with ChangeNotifier {
     _remoteHostStatusError = null;
     await _settingsService.saveSettings(_settings);
     notifyListeners();
+  }
+
+  /// Own client for Unsloth calls. The shared [_lmStudioService] carries
+  /// LM Studio's custom / Cloudflare Access headers, which must not reach the
+  /// Unsloth host (it can be a remote GPU box).
+  LMStudioService _unslothClient([CloudApiProvider? cp]) {
+    cp ??= () {
+      final active = resolveCloudProvider();
+      if (active?.type == CloudApiType.unsloth) return active;
+      return CloudApiService()
+          .providers
+          .where((p) => p.type == CloudApiType.unsloth)
+          .firstOrNull;
+    }();
+    return LMStudioService()
+      ..customHeaders =
+          (cp != null && cp.customHeadersEnabled) ? cp.customHeaders : null
+      // Relay token / backend hint are only attached to the relay URL.
+      ..remoteAuthToken = _lmStudioService.remoteAuthToken
+      ..remoteRelayBaseUrl = _lmStudioService.remoteRelayBaseUrl
+      ..remoteBackend = _settings.isRemoteActive ? 'unsloth' : null;
+  }
+
+  /// True for the paired relay / Home URL or any LM Mini relay host.
+  bool _isRelayLikeUrl(String url) {
+    final remote = _settings.remoteServerUrl;
+    return (remote != null && remote.isNotEmpty && url.trim() == remote) ||
+        isRelayRequestUrl(url, remote) ||
+        ConnectHostError.isRelayUrl(url);
+  }
+
+  /// Points every free local server (Ollama / oMLX / JAN / Unsloth) that
+  /// Remote Access aimed at the relay back at its own LAN address: the one
+  /// saved for its kind, else the legacy single slot when it is the active
+  /// provider, else the type's default (never a dead relay URL).
+  Future<void> _restoreLocalProviderUrls({String? legacyActiveBase}) async {
+    final cloud = CloudApiService();
+    final active = resolveCloudProvider(cloud);
+    final saved = _settings.savedLocalProviderBaseUrls;
+    for (final p in List.of(cloud.providers)) {
+      final base = p.baseUrl;
+      if (!p.type.isFreeLocalServer || base == null) continue;
+      if (!_isRelayLikeUrl(base)) continue;
+      final legacy = (legacyActiveBase != null &&
+              legacyActiveBase.isNotEmpty &&
+              active?.id == p.id &&
+              !_isRelayLikeUrl(legacyActiveBase))
+          ? legacyActiveBase
+          : null;
+      final lan = saved[p.type.providerKind] ?? legacy ?? p.type.defaultBaseUrl;
+      debugPrint('🔁 Restoring ${p.type.providerKind} to $lan');
+      await cloud.saveProvider(p.copyWith(baseUrl: lan));
+    }
   }
 
   /// Lets Pro parts notify without touching the protected member directly.
@@ -2161,10 +2319,10 @@ class SettingsProvider with ChangeNotifier {
     _lmStudioService.remoteBackend =
         _settings.isRemoteActive ? remoteBackendKind : null;
     _lmStudioService.customHeaders = _settings.effectiveExtraHeaders;
-    OllamaService.instance.remoteAuthToken =
-        (_settings.isRemoteActive && _settings.activeProviderKind == 'ollama')
-            ? token
-            : null;
+    // Whenever Remote is on, not only when Ollama is the active server: a
+    // group-chat Ollama participant goes through the relay too. The token is
+    // only ever attached to the paired relay URL (OllamaService._headers).
+    OllamaService.instance.remoteAuthToken = token;
     OllamaService.instance.remoteRelayBaseUrl = relayUrl;
     CloudApiService().remoteAuthToken = token;
     CloudApiService().remoteRelayBaseUrl = relayUrl;
@@ -2193,7 +2351,7 @@ class SettingsProvider with ChangeNotifier {
     }
 
     final savedLocal = _settings.savedLocalServerUrl ?? _settings.serverUrl;
-    final fromKey = ServerModelMemory.keyFor(_settings);
+    final fromKey = _modelSlotKey();
     final fromModel = _settings.selectedModel;
 
     try {
@@ -2211,7 +2369,7 @@ class SettingsProvider with ChangeNotifier {
       activeProviderKind: 'lmStudio',
     );
     _rememberSelectedModel(key: fromKey, modelId: fromModel);
-    _restoreSelectedModel(ServerModelMemory.keyFor(_settings));
+    _restoreSelectedModel(_modelSlotKey());
     await _settingsService.saveSettings(_settings);
     await ServerProfileService.instance.ensureUsbProfile();
     await ServerProfileService.instance.markActive(ServerProfile.usbId);
@@ -2233,7 +2391,7 @@ class SettingsProvider with ChangeNotifier {
   Future<void> deactivateUsbMode() async {
     if (!_settings.usbModeEnabled) return;
     final localUrl = _settings.savedLocalServerUrl ?? 'http://localhost:1234';
-    final fromKey = ServerModelMemory.keyFor(_settings);
+    final fromKey = _modelSlotKey();
     final fromModel = _settings.selectedModel;
     _usbConnectionSubscription?.cancel();
     _usbConnectionSubscription = null;
@@ -2243,7 +2401,7 @@ class SettingsProvider with ChangeNotifier {
       serverUrl: localUrl,
     );
     _rememberSelectedModel(key: fromKey, modelId: fromModel);
-    _restoreSelectedModel(ServerModelMemory.keyFor(_settings));
+    _restoreSelectedModel(_modelSlotKey());
     await _settingsService.saveSettings(_settings);
     notifyListeners();
     try {
@@ -2272,8 +2430,17 @@ class SettingsProvider with ChangeNotifier {
     });
   }
 
+  /// Model-memory slot for the current server (per provider id for cloud
+  /// kinds; see [ServerModelMemory.keyFor]).
+  String _modelSlotKey() => ServerModelMemory.keyFor(
+        _settings,
+        cloudProviderId: isCloudProviderKind(_settings.activeProviderKind)
+            ? resolveCloudProvider(CloudApiService())?.id
+            : null,
+      );
+
   void _rememberSelectedModel({String? key, String? modelId}) {
-    final slot = key ?? ServerModelMemory.keyFor(_settings);
+    final slot = key ?? _modelSlotKey();
     final id = modelId ?? _settings.selectedModel;
     final map = Map<String, String>.from(_settings.selectedModelByServer);
     if (id == null || id.isEmpty) {
@@ -2298,7 +2465,7 @@ class SettingsProvider with ChangeNotifier {
   /// Returns true when persisted selection changed so the caller can save.
   bool _reconcileSelectedModelWithCatalog() {
     if (_availableModels.isEmpty) return false;
-    final key = ServerModelMemory.keyFor(_settings);
+    final key = _modelSlotKey();
     final next = ServerModelMemory.pick(
       remembered: _settings.selectedModelByServer[key],
       current: _settings.selectedModel,
@@ -2309,6 +2476,9 @@ class SettingsProvider with ChangeNotifier {
       _settings = _settings.copyWith(selectedModel: next);
       changed = true;
     }
+    // The picker shows settings.selectedModel; align the provider's copy
+    // even when it was the one that drifted (no-op when equal).
+    unawaited(_syncActiveCloudModel(next));
     final remembered = _settings.selectedModelByServer[key];
     if (next != null) {
       if (remembered != next) {
@@ -2322,10 +2492,31 @@ class SettingsProvider with ChangeNotifier {
     return changed;
   }
 
+  /// Ollama / oMLX / JAN / Unsloth / cloud chat sends the provider's own
+  /// selectedModel, so every pick must land there too — otherwise the model
+  /// sheet showed the new model while chat kept sending the old one.
+  Future<void> _syncActiveCloudModel(String? modelId) async {
+    if (modelId == null || modelId.isEmpty) return;
+    if (!isCloudProviderKind(_settings.activeProviderKind)) return;
+    final cloud = CloudApiService();
+    final cp = resolveCloudProvider(cloud);
+    if (cp == null || cp.selectedModel == modelId) return;
+    try {
+      await cloud.saveProvider(cp.copyWith(selectedModel: modelId));
+      unawaited(SiriIntentBridge.syncFromSettings(
+        _settings,
+        cloud: resolveCloudProvider(cloud),
+      ));
+    } catch (e) {
+      debugPrint('Syncing provider model failed: $e');
+    }
+  }
+
   void updateSelectedModel(String? modelId) {
     // Update the selected model
     _settings = _settings.copyWith(selectedModel: modelId);
     _rememberSelectedModel(modelId: modelId);
+    unawaited(_syncActiveCloudModel(modelId));
 
     // If a model is selected, ensure the user-chosen context window still
     // fits this model. We clamp (not overwrite) so the user's preference
@@ -2520,15 +2711,7 @@ class SettingsProvider with ChangeNotifier {
     }
 
     updateSelectedModel(modelId);
-
-    // Keep cloud provider's selectedModel in sync when applicable.
-    if (isCloudProviderKind(_settings.activeProviderKind)) {
-      final cloud = CloudApiService();
-      final cp = resolveCloudProvider(cloud);
-      if (cp != null && cp.selectedModel != modelId) {
-        await cloud.saveProvider(cp.copyWith(selectedModel: modelId));
-      }
-    }
+    await _syncActiveCloudModel(modelId);
   }
 
   /// Switch the global active provider to [kind] for persona defaults.

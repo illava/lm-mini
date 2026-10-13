@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -21,6 +22,12 @@ class SiriIntentBridge {
 
   static bool get _supported => !kIsWeb && Platform.isIOS;
 
+  /// Whether Siri snapshots are used on this platform (iOS only).
+  static bool get isSupported => _supported;
+
+  /// Last snapshot sent, so frequent re-syncs don't rewrite identical data.
+  static String? _lastSent;
+
   static Future<void> syncFromSettings(
     AppSettings settings, {
     CloudApiProvider? cloud,
@@ -41,8 +48,12 @@ class SiriIntentBridge {
       settings: settings,
       cloud: provider,
     );
+    final map = snap.toMap();
+    final encoded = jsonEncode(map);
+    if (encoded == _lastSent) return;
     try {
-      await _channel.invokeMethod('syncSnapshot', snap.toMap());
+      await _channel.invokeMethod('syncSnapshot', map);
+      _lastSent = encoded;
     } catch (e) {
       if (kDebugMode) debugPrint('SiriIntentBridge.syncFromSettings: $e');
     }

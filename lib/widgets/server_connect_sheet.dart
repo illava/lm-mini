@@ -1,3 +1,4 @@
+import '../utils/server_url.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -370,15 +371,12 @@ class _ServerConnectSheetState extends State<_ServerConnectSheet> {
   }
 
   String _normalizeUrl(String raw) {
-    var trimmed = raw.trim();
-    if (trimmed.isEmpty) return trimmed;
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      trimmed = 'http://$trimmed';
-    }
-    while (trimmed.endsWith('/')) {
-      trimmed = trimmed.substring(0, trimmed.length - 1);
-    }
-    return trimmed;
+    if (_isLmStudio) return normalizeLmStudioBaseUrl(raw);
+    final type = _cloudType;
+    return normalizeCloudBaseUrl(
+      raw,
+      stripVersionSuffix: type != null && type.chatPath.startsWith('/v1/'),
+    );
   }
 
   Future<void> _connect() async {
@@ -473,8 +471,12 @@ class _ServerConnectSheetState extends State<_ServerConnectSheet> {
     required String url,
     required String key,
   }) async {
+    // Test with the headers typed in this sheet (Cloudflare Access etc.),
+    // or a server behind them can never be added.
+    final headers = _collectHeaders();
     if (_isLmStudio) {
-      final result = await LMStudioService().testConnection(
+      final service = LMStudioService()..customHeaders = headers;
+      final result = await service.testConnection(
         url,
         apiToken: key.isEmpty ? null : key,
       );
@@ -508,6 +510,8 @@ class _ServerConnectSheetState extends State<_ServerConnectSheet> {
           .map((p) => p.selectedModel)
           .firstOrNull,
       isEnabled: true,
+      customHeaders: headers,
+      customHeadersEnabled: _headersEnabled,
     );
 
     final ok = await cloud.testConnection(provider);
@@ -531,7 +535,10 @@ class _ServerConnectSheetState extends State<_ServerConnectSheet> {
     final name = _nameController.text.trim().isEmpty
         ? _defaultName
         : _nameController.text.trim();
-    final headers = _collectHeaders();
+    // An edit sends the full intended state: a cleared key is '' and cleared
+    // headers are {} — never null, which every merge reads as "keep the old
+    // value" (that is how a removed key kept being sent).
+    final headers = _headersEnabled ? (_collectHeaders() ?? const {}) : null;
 
     if (_isLmStudio) {
       return ServerProfile(
@@ -539,7 +546,7 @@ class _ServerConnectSheetState extends State<_ServerConnectSheet> {
         name: name,
         kind: ServerProfileKind.lmStudio,
         baseUrl: url,
-        apiKey: key.isEmpty ? null : key,
+        apiKey: key,
         customHeaders: headers,
         customHeadersEnabled: _headersEnabled,
         lastUsedAt: DateTime.now(),
@@ -557,7 +564,7 @@ class _ServerConnectSheetState extends State<_ServerConnectSheet> {
       baseUrl: url.isNotEmpty
           ? url
           : (type.defaultBaseUrl.isEmpty ? null : type.defaultBaseUrl),
-      apiKey: key.isEmpty ? null : key,
+      apiKey: key,
       customHeaders: headers,
       customHeadersEnabled: _headersEnabled,
       lastUsedAt: DateTime.now(),

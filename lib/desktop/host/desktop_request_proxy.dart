@@ -19,12 +19,47 @@ class DesktopRequestProxy {
   static const hostStatusPath = '/lm-mini/host-status';
   static const syncPath = HomeSyncService.syncPath;
 
+  /// Upstream clients for requests still streaming, keyed `channel:id`, so a
+  /// phone-side Stop (`cancel` frame) can abort generation on this machine.
+  final Map<String, _Inflight> _inflight = {};
+  final Set<String> _cancelled = {};
+
+  static String _key(String channel, String id) => '$channel:$id';
+
+  /// Aborts one in-flight request (phone pressed Stop or went away).
+  void cancel(String id, {String channel = 'relay'}) {
+    final key = _key(channel, id);
+    final entry = _inflight.remove(key);
+    if (entry == null) return;
+    _cancelled.add(key);
+    debugPrint('🖥️ DesktopProxy: cancelled $key');
+    // abort() destroys the socket even mid-response, so LM Studio / Ollama
+    // see the disconnect and stop generating. close(force) alone did not.
+    entry.request?.abort();
+    entry.client?.close(force: true);
+  }
+
+  /// Aborts every in-flight request on [channel] (its connection dropped).
+  void cancelAll({String channel = 'relay'}) {
+    final prefix = '$channel:';
+    for (final key in _inflight.keys.toList()) {
+      if (key.startsWith(prefix)) {
+        cancel(key.substring(prefix.length), channel: channel);
+      }
+    }
+  }
+
+  @visibleForTesting
+  int inflightCount({String channel = 'relay'}) =>
+      _inflight.keys.where((k) => k.startsWith('$channel:')).length;
+
   /// Resolve a target from path + `X-LM-Mini-Backend`, then stream the response
   /// via [send] using Connect wire frames (`response-start` / `chunk` / `end`).
   Future<void> handleRelayStyleRequest({
     required Map<String, dynamic> msg,
     required DesktopRelayBackends backends,
     required void Function(Map<String, dynamic> frame) send,
+    String channel = 'relay',
   }) async {
     final id = msg['id']?.toString();
     if (id == null) return;
@@ -81,12 +116,24 @@ class DesktopRequestProxy {
       return;
     }
 
+    // Registered before any wait (the built-in runtime can take 15 s+ to
+    // boot) so a Stop during that wait is not lost.
+    final key = _key(channel, id);
+    final entry = _Inflight();
+    _inflight[key] = entry;
+    bool stoppedEarly() {
+      if (!_cancelled.remove(key)) return false;
+      _inflight.remove(key);
+      return true;
+    }
+
     var forwardPath = path.startsWith('/') ? path : '/$path';
     if (target.kind == 'lmMiniDesktop') {
       forwardPath = rewriteSidecarPath(forwardPath);
       final isProbe = _isSafeMethod(method) && isPairingProbePath(pathOnly);
       final runtime = DesktopRuntimeManager.instance;
       if (isProbe && !runtime.isRunning) {
+        _inflight.remove(key);
         unawaited(runtime.ensureBuiltinRunning());
         if (method == 'HEAD') {
           _sendEmpty(send, id, 200);
@@ -97,7 +144,9 @@ class DesktopRequestProxy {
       }
       if (!isProbe) {
         final started = await runtime.ensureBuiltinRunning();
+        if (stoppedEarly()) return;
         if (!started) {
+          _inflight.remove(key);
           send({
             'type': 'response-error',
             'id': id,
@@ -129,10 +178,13 @@ class DesktopRequestProxy {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
     client.idleTimeout = const Duration(minutes: 10);
+    entry.client = client;
 
     try {
       final uri = Uri.parse('http://${target.host}:${target.port}$forwardPath');
       final req = await client.openUrl(method, uri);
+      entry.request = req;
+      if (_cancelled.contains(key)) req.abort();
       headers.forEach(req.headers.set);
 
       if (body != null) {
@@ -227,24 +279,28 @@ class DesktopRequestProxy {
           path.startsWith('/view') ||
           path.startsWith('/tts/');
 
-      await for (final chunk in res) {
-        if (isBinary) {
+      if (isBinary) {
+        await for (final chunk in res) {
           send({
             'type': 'response-chunk',
             'id': id,
             'data': base64Encode(chunk),
             'encoding': 'base64',
           });
-        } else {
-          send({
-            'type': 'response-chunk',
-            'id': id,
-            'data': utf8.decode(chunk, allowMalformed: true),
-          });
+        }
+      } else {
+        // Streaming decoder: an emoji or CJK character split across two
+        // TCP chunks must not turn into two U+FFFD halves.
+        await for (final text
+            in res.transform(const Utf8Decoder(allowMalformed: true))) {
+          if (text.isEmpty) continue;
+          send({'type': 'response-chunk', 'id': id, 'data': text});
         }
       }
       send({'type': 'response-end', 'id': id});
     } catch (e) {
+      // Stopped from the phone: the relay already dropped this request.
+      if (_cancelled.contains(key)) return;
       debugPrint('🖥️ DesktopProxy: ${target.kind} error $e');
       send({
         'type': 'response-error',
@@ -253,6 +309,8 @@ class DesktopRequestProxy {
         'error': _friendlyBackendError(target.kind, e),
       });
     } finally {
+      _inflight.remove(key);
+      _cancelled.remove(key);
       client.close(force: true);
     }
   }
@@ -616,6 +674,11 @@ class DesktopRequestProxy {
     });
     send({'type': 'response-end', 'id': id});
   }
+}
+
+class _Inflight {
+  HttpClient? client;
+  HttpClientRequest? request;
 }
 
 class DesktopProxyTarget {

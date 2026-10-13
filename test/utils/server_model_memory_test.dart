@@ -123,4 +123,50 @@ void main() {
       restored.selectedModelByServer,
     );
   });
+
+  group('per cloud provider slots', () {
+    String k(String kind, String? id) => ServerModelMemory.key(
+          providerKind: kind,
+          isRemoteActive: false,
+          usbModeEnabled: false,
+          serverUrl: '',
+          cloudProviderId: id,
+        );
+
+    test('two Ollama servers get separate slots', () {
+      expect(k('ollama', 'ollama-home'), isNot(k('ollama', 'ollama-office')));
+    });
+
+    test('OpenAI and Mistral (both kind "cloud") get separate slots', () {
+      expect(k('cloud', 'openai_1'), isNot(k('cloud', 'mistral_2')));
+    });
+
+    test('without a provider id the legacy key is unchanged', () {
+      expect(k('ollama', null), 'cloud:ollama');
+      expect(k('cloud', ''), 'cloud:cloud');
+    });
+
+    test('remote and LM Studio keys ignore the cloud provider id', () {
+      expect(
+        ServerModelMemory.key(
+          providerKind: 'ollama',
+          isRemoteActive: true,
+          usbModeEnabled: false,
+          serverUrl: 'https://relay.example.com/s/x',
+          cloudProviderId: 'ollama-home',
+        ),
+        'remote:ollama',
+      );
+      expect(
+        ServerModelMemory.key(
+          providerKind: 'lmStudio',
+          isRemoteActive: false,
+          usbModeEnabled: false,
+          serverUrl: 'http://192.168.1.5:1234',
+          cloudProviderId: 'x',
+        ),
+        'local:http://192.168.1.5:1234',
+      );
+    });
+  });
 }

@@ -536,12 +536,12 @@
   "voiceKokoroModelSize": "Descarga necesaria (~400 MB paquete compartido)",
   "voiceKokoroDeleteMessage": "Esto eliminará todos los paquetes de idioma TTS descargados. Puedes volver a descargarlos después.",
   "voiceKokoroDeleteConfirm": "Eliminar",
-  "voiceTtsLanguagePacksHint": "Inglés, español, francés y chino comparten una descarga (~400 MB). Alemán y ruso son más pequeñas (~34 MB cada una).",
+  "voiceTtsLanguagePacksHint": "Inglés, español, francés y chino comparten una descarga de Kokoro (~400 MB). Alemán y ruso usan voces Piper más pequeñas (~34 MB cada una).",
   "voiceTtsLanguagePacks": "Paquetes de voz",
   "voiceTtsLanguagePacksSubtitleNone": "Descarga un idioma para hablar en este dispositivo",
   "voiceTtsLanguagePacksSubtitleReady": "{ready} de {total} idiomas listos",
   "voiceTtsLanguagePacksSubtitleDownloading": "Descargando {name}…",
-  "voiceTtsSharedPackSize": "Descarga compartida · ~{size} MB",
+  "voiceTtsSharedPackSize": "Kokoro · descarga compartida · ~{size} MB",
   "@voiceTtsSharedPackSize": {
     "placeholders": {
       "size": {
@@ -549,7 +549,7 @@
       }
     }
   },
-  "voiceTtsPiperPackSize": "Descarga más pequeña · ~{size} MB",
+  "voiceTtsPiperPackSize": "Voz Piper · descarga más pequeña · ~{size} MB",
   "@voiceTtsPiperPackSize": {
     "placeholders": {
       "size": {
@@ -2357,5 +2357,6 @@
   "remoteAccessSwitchConnecting": "Conectando con tu ordenador…",
   "remoteAccessUnreachable": "El acceso remoto está activado, pero tu ordenador no responde. Asegúrate de que esté encendido y compartiendo.",
   "remoteAccessTurnOnFailed": "No se pudo activar el acceso remoto. Inténtalo de nuevo.",
+  "remoteAccessTurnOff": "Desactivar acceso remoto",
   "remoteAccessTurnOffFailed": "No se pudo desactivar el acceso remoto. Inténtalo de nuevo."
 }

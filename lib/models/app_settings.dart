@@ -488,7 +488,12 @@ class AppSettings {
   final String?
       savedLocalServerUrl; // Saved local server URL when switching to remote
   /// Saved Ollama/oMLX base URL when remote mode rewrites the cloud provider.
+  /// Legacy single slot; see [savedLocalProviderBaseUrls].
   final String? savedLocalCloudBaseUrl;
+
+  /// LAN base URL of each free local server (provider kind → URL) from before
+  /// Remote Access pointed it at the relay, restored when Remote turns off.
+  final Map<String, String> savedLocalProviderBaseUrls;
   final String?
       remoteEncryptionKey; // End-to-end encryption key for remote access
   /// Connect app semver from the last paired QR (v5+).
@@ -740,6 +745,7 @@ class AppSettings {
     this.remoteLastConnected,
     this.savedLocalServerUrl,
     this.savedLocalCloudBaseUrl,
+    Map<String, String>? savedLocalProviderBaseUrls,
     this.remoteEncryptionKey,
     this.remoteConnectVersion,
     List<String>? remoteBackends,
@@ -772,6 +778,7 @@ class AppSettings {
   })  : remoteBackends = remoteBackends ?? const [],
         homeSyncPersonaIds = homeSyncPersonaIds ?? const [],
         selectedModelByServer = selectedModelByServer ?? const {},
+        savedLocalProviderBaseUrls = savedLocalProviderBaseUrls ?? const {},
         modelParamPresets = modelParamPresets ?? const {};
 
   /// Whether an API token is configured for LM Studio authentication.
@@ -997,6 +1004,8 @@ class AppSettings {
         remoteBackends: _readStringList(() => remoteBackends),
         homeSyncPersonaIds: _readStringList(() => homeSyncPersonaIds),
         selectedModelByServer: _readStringMap(() => selectedModelByServer),
+        savedLocalProviderBaseUrls:
+            _readStringMap(() => savedLocalProviderBaseUrls),
         contextFitMode: _readString(() => contextFitMode, 'off'),
         modelParamPresets: _readParamPresetMap(() => modelParamPresets),
       );
@@ -1138,6 +1147,7 @@ class AppSettings {
     Object? remoteLastConnected = _unset,
     Object? savedLocalServerUrl = _unset,
     Object? savedLocalCloudBaseUrl = _unset,
+    Map<String, String>? savedLocalProviderBaseUrls,
     Object? remoteEncryptionKey = _unset,
     Object? remoteConnectVersion = _unset,
     List<String>? remoteBackends,
@@ -1395,6 +1405,8 @@ class AppSettings {
       savedLocalCloudBaseUrl: identical(savedLocalCloudBaseUrl, _unset)
           ? this.savedLocalCloudBaseUrl
           : savedLocalCloudBaseUrl as String?,
+      savedLocalProviderBaseUrls:
+          savedLocalProviderBaseUrls ?? this.savedLocalProviderBaseUrls,
       remoteEncryptionKey: identical(remoteEncryptionKey, _unset)
           ? this.remoteEncryptionKey
           : remoteEncryptionKey as String?,
@@ -1582,6 +1594,7 @@ class AppSettings {
       'remoteLastConnected': remoteLastConnected,
       'savedLocalServerUrl': savedLocalServerUrl,
       'savedLocalCloudBaseUrl': savedLocalCloudBaseUrl,
+      'savedLocalProviderBaseUrls': savedLocalProviderBaseUrls,
       'remoteEncryptionKey': remoteEncryptionKey,
       'remoteConnectVersion': remoteConnectVersion,
       'remoteBackends': remoteBackends,
@@ -1784,6 +1797,8 @@ class AppSettings {
       remoteLastConnected: json['remoteLastConnected'],
       savedLocalServerUrl: json['savedLocalServerUrl'],
       savedLocalCloudBaseUrl: json['savedLocalCloudBaseUrl'] as String?,
+      savedLocalProviderBaseUrls:
+          _parseStringMap(json['savedLocalProviderBaseUrls']),
       remoteEncryptionKey: json['remoteEncryptionKey'],
       remoteConnectVersion: json['remoteConnectVersion'] as String?,
       remoteBackends: (json['remoteBackends'] as List?)

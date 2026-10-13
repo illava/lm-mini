@@ -2069,7 +2069,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get voiceTtsLanguagePacksHint =>
-      'Английский, испанский, французский и китайский используют одну загрузку (~400 МБ). Немецкий и русский меньше (~34 МБ).';
+      'Английский, испанский, французский и китайский используют одну загрузку Kokoro (~400 МБ). Немецкий и русский — более лёгкие голоса Piper (~34 МБ).';
 
   @override
   String get voiceTtsLanguagePacks => 'Голосовые пакеты';
@@ -2090,12 +2090,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String voiceTtsSharedPackSize(int size) {
-    return 'Общая загрузка · ~$size МБ';
+    return 'Kokoro · общая загрузка · ~$size МБ';
   }
 
   @override
   String voiceTtsPiperPackSize(int size) {
-    return 'Меньшая загрузка · ~$size МБ';
+    return 'Голос Piper · меньшая загрузка · ~$size МБ';
   }
 
   @override
@@ -7375,6 +7375,9 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get remoteAccessTurnOnFailed =>
       'Не удалось включить удалённый доступ. Попробуйте ещё раз.';
+
+  @override
+  String get remoteAccessTurnOff => 'Выключить удалённый доступ';
 
   @override
   String get remoteAccessTurnOffFailed =>

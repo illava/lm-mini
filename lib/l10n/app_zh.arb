@@ -827,12 +827,12 @@
   "voiceKokoroDeleteTitle": "删除Kokoro模型？",
   "voiceKokoroDeleteMessage": "这将删除所有已下载的 TTS 语言包。您可以稍后重新下载。",
   "voiceKokoroDeleteConfirm": "删除",
-  "voiceTtsLanguagePacksHint": "英语、西班牙语、法语和中文共用一次下载（约 400 MB）。德语和俄语更小（各约 34 MB）。",
+  "voiceTtsLanguagePacksHint": "英语、西班牙语、法语和中文共用一次 Kokoro 下载（约 400 MB）。德语和俄语使用更小的 Piper 语音（各约 34 MB）。",
   "voiceTtsLanguagePacks": "语音包",
   "voiceTtsLanguagePacksSubtitleNone": "下载一种语言即可在本机朗读",
   "voiceTtsLanguagePacksSubtitleReady": "{ready} / {total} 种语言已就绪",
   "voiceTtsLanguagePacksSubtitleDownloading": "正在下载 {name}…",
-  "voiceTtsSharedPackSize": "共享下载 · ~{size} MB",
+  "voiceTtsSharedPackSize": "Kokoro · 共享下载 · ~{size} MB",
   "@voiceTtsSharedPackSize": {
     "placeholders": {
       "size": {
@@ -840,7 +840,7 @@
       }
     }
   },
-  "voiceTtsPiperPackSize": "较小下载 · ~{size} MB",
+  "voiceTtsPiperPackSize": "Piper 语音 · 较小下载 · ~{size} MB",
   "@voiceTtsPiperPackSize": {
     "placeholders": {
       "size": {
@@ -2945,5 +2945,6 @@
   "remoteAccessSwitchConnecting": "正在连接你的电脑…",
   "remoteAccessUnreachable": "远程访问已开启，但电脑没有响应。请确认电脑处于唤醒状态并已开启共享。",
   "remoteAccessTurnOnFailed": "无法开启远程访问，请重试。",
+  "remoteAccessTurnOff": "关闭远程访问",
   "remoteAccessTurnOffFailed": "无法关闭远程访问，请重试。"
 }

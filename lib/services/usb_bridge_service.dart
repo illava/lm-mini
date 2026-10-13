@@ -25,6 +25,7 @@
 //       "path": "/v1/chat/completions",
 //       "headers": { ... },
 //       "body": "<utf8 string>" }
+//     { "type": "cancel", "id": "..." }   // caller hung up (Stop); abort it
 //     { "type": "ping" }
 //
 //   Mac -> App:
@@ -52,8 +53,9 @@ const int kUsbBridgeHttpPort = 2347;
 const int kUsbBridgeControlPort = 2348;
 
 class _PendingRequest {
-  _PendingRequest(this.response);
+  _PendingRequest(this.response, this.path);
   final HttpResponse response;
+  final String path;
   bool started = false;
 }
 
@@ -244,8 +246,16 @@ class UsbBridgeService {
 
     final body = await _readBody(req);
 
+    // Pass every token through as it arrives. With dart:io's default output
+    // buffer a whole reply sat in memory and showed up only at the end.
+    res.bufferOutput = false;
+
     final id = (++_idCounter).toString();
-    _pending[id] = _PendingRequest(res);
+    _pending[id] = _PendingRequest(res, req.uri.path);
+    // The in-process caller closing its connection (Stop) completes `done`
+    // while the request is still pending: tell the Mac to stop generating.
+    // End/error frames remove the entry first, so they never send a cancel.
+    res.done.then((_) => _abandon(id), onError: (_) => _abandon(id));
 
     final headers = <String, String>{};
     req.headers.forEach((name, values) {
@@ -266,6 +276,35 @@ class UsbBridgeService {
       'headers': headers,
       'body': body,
     });
+  }
+
+  static bool _isGenerationPath(String path) =>
+      path.endsWith('/chat/completions') ||
+      path.endsWith('/completions') ||
+      path.endsWith('/responses') ||
+      path == '/api/v1/chat' ||
+      path == '/api/chat' ||
+      path == '/api/generate';
+
+  /// Stop pressed: abort every generation the Mac is streaming for us.
+  /// dart:io doesn't reliably report the in-process caller hanging up, so
+  /// the chat calls this directly instead of relying on [_abandon] alone.
+  void cancelGenerations() {
+    final ids = [
+      for (final e in _pending.entries)
+        if (_isGenerationPath(e.value.path)) e.key,
+    ];
+    for (final id in ids) {
+      final pending = _pending[id];
+      _abandon(id);
+      pending?.response.close().catchError((_) {});
+    }
+  }
+
+  void _abandon(String id) {
+    if (_pending.remove(id) == null) return;
+    debugPrint('UsbBridgeService: request $id abandoned, cancelling on Mac');
+    _send({'type': 'cancel', 'id': id});
   }
 
   Future<String> _readBody(HttpRequest req) async {
@@ -311,6 +350,7 @@ class UsbBridgeService {
       }
     } catch (e) {
       debugPrint('UsbBridgeService: chunk write failed: $e');
+      _abandon(id!);
     }
   }
 

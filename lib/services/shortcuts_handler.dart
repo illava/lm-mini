@@ -610,6 +610,14 @@ class ShortcutsHandler {
     required String systemPrompt,
     required String userPrompt,
   }) async {
+    if (snap.usesTools) {
+      final viaTools = await _postLmStudioToolsOneShot(
+        snap,
+        systemPrompt: systemPrompt,
+        userPrompt: userPrompt,
+      );
+      if (viaTools != null) return viaTools;
+    }
     final response = await http
         .post(
           Uri.parse(snap.chatUrl!),
@@ -649,6 +657,55 @@ class ShortcutsHandler {
       }
     }
     throw StateError('Unexpected response shape from server.');
+  }
+
+  /// LM Studio's own chat API with the user's MCP tools (web search etc.):
+  /// LM Studio runs the tool calls and returns the final answer. Returns null
+  /// when this LM Studio has no `/api/v1/chat` (older versions) so the caller
+  /// falls back to the plain completion.
+  Future<String?> _postLmStudioToolsOneShot(
+    SiriInferenceSnapshot snap, {
+    required String systemPrompt,
+    required String userPrompt,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse(snap.toolsChatUrl!),
+          headers: snap.headers,
+          body: jsonEncode({
+            'model': snap.model,
+            'input': userPrompt,
+            'system_prompt': systemPrompt,
+            'integrations': snap.integrations,
+            'temperature': snap.temperature,
+            // Room for the tool call plus the answer.
+            'max_output_tokens': snap.maxTokens < 1024 ? 1024 : snap.maxTokens,
+            'stream': false,
+          }),
+        )
+        .timeout(const Duration(seconds: 90));
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) {
+      throw StateError(
+        'The model server returned HTTP ${response.statusCode}.',
+      );
+    }
+    final decoded = jsonDecode(response.body);
+    final output = decoded is Map ? decoded['output'] : null;
+    // Older LM Studio: HTTP 200 + {"error":"Unexpected endpoint…"} — no
+    // tools API, use the plain completion instead.
+    if (output is! List) return null;
+    final buf = StringBuffer();
+    for (final item in output) {
+      if (item is Map && item['type'] == 'message' && item['content'] != null) {
+        buf.write(item['content']);
+      }
+    }
+    final text = buf.toString().trim();
+    if (text.isEmpty) {
+      throw StateError('The model returned an empty reply.');
+    }
+    return text;
   }
 
   Future<String> _runLmStudioOneShot(

@@ -2032,9 +2032,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         case ServerProfileKind.lmStudio:
           final url = (profile.baseUrl ?? settings.settings.serverUrl).trim();
           if (url.isEmpty) return false;
-          final result = await LMStudioService().testConnection(
+          final key = profile.apiKey ?? settings.settings.apiToken;
+          final service = LMStudioService()
+            ..customHeaders =
+                profile.customHeadersEnabled ? profile.customHeaders : null;
+          final result = await service.testConnection(
             url,
-            apiToken: profile.apiKey ?? settings.settings.apiToken,
+            apiToken: (key == null || key.isEmpty) ? null : key,
           );
           return result['success'] == true;
         case ServerProfileKind.cloud:
@@ -2380,6 +2384,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       baseUrl: customBase.isNotEmpty ? customBase : null,
       selectedModel: existing?.selectedModel,
       isEnabled: true,
+      // This form has no header fields: keep the saved ones.
+      customHeaders: existing?.customHeaders,
+      customHeadersEnabled: existing?.customHeadersEnabled ?? false,
     );
 
     setState(() => _isTestingCloudConnection = true);
@@ -2387,6 +2394,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       // Save first
       await cloud.saveProvider(provider);
+      // Keep the saved server in step, or activating it later would put
+      // its old key (or URL) back.
+      final profile = ServerProfileService.instance.byId(provider.id);
+      if (profile != null) {
+        await ServerProfileService.instance.upsert(profile.copyWith(
+          apiKey: apiKey,
+          baseUrl: provider.baseUrl,
+        ));
+      }
 
       // Test connection
       final success = await cloud.testConnection(provider);

@@ -1979,7 +1979,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceTtsLanguagePacksHint =>
-      '英语、西班牙语、法语和中文共用一次下载（约 400 MB）。德语和俄语更小（各约 34 MB）。';
+      '英语、西班牙语、法语和中文共用一次 Kokoro 下载（约 400 MB）。德语和俄语使用更小的 Piper 语音（各约 34 MB）。';
 
   @override
   String get voiceTtsLanguagePacks => '语音包';
@@ -1999,12 +1999,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String voiceTtsSharedPackSize(int size) {
-    return '共享下载 · ~$size MB';
+    return 'Kokoro · 共享下载 · ~$size MB';
   }
 
   @override
   String voiceTtsPiperPackSize(int size) {
-    return '较小下载 · ~$size MB';
+    return 'Piper 语音 · 较小下载 · ~$size MB';
   }
 
   @override
@@ -7005,6 +7005,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteAccessTurnOnFailed => '无法开启远程访问，请重试。';
+
+  @override
+  String get remoteAccessTurnOff => '关闭远程访问';
 
   @override
   String get remoteAccessTurnOffFailed => '无法关闭远程访问，请重试。';
