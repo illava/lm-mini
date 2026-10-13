@@ -1,9 +1,9 @@
 # LM Mini
 
 <p>
-  <a href="https://apps.apple.com/app/lm-mini/id6751125309"><img alt="Download on the App Store" src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" height="54"></a>
+  <a href="https://apps.apple.com/app/lm-mini/id6751125309"><img alt="Download on the App Store" src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" width="162"></a>
   &nbsp;
-  <a href="https://play.google.com/store/apps/details?id=net.neuro9.lmmini"><img alt="Get it on Google Play" src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" height="54"></a>
+  <a href="https://play.google.com/store/apps/details?id=net.neuro9.lmmini"><img alt="Get it on Google Play" src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" width="182"></a>
 </p>
 
 [![Website](https://img.shields.io/badge/Website-lmmini.com-7C4DFF)](https://lmmini.com)
@@ -41,25 +41,50 @@ available in the official LM Mini app:
 
 More about the open-source build: https://lmmini.com/open-source.html
 
-| Open source (this repo) | Pro (official app only) |
-| --- | --- |
-| Chat with LM Studio, Ollama, oMLX, Jan and Unsloth over your LAN | Pro Search and URL reader |
-| On-device models: the free catalog slot plus one imported GGUF | Code Sandbox |
-| Personas | Memory |
-| Image generation: ComfyUI, AUTOMATIC1111, on-device Stable Diffusion (free slot) | Group Chat |
-| Voice: system TTS, Kokoro, Whisper speech-to-text | Remote Access and Home sync |
-| SearXNG web search and MCP tools | Cloud Backup |
-| Arena "find your model" | Analytics |
-| Widgets and Siri Shortcuts | App Lock |
-| Apple Watch companion | Compact and Branching |
-| Desktop apps with USB mode | Arena history |
-| iCloud sync | Model and persona parameter presets, Context Fit |
-| PDF, TXT and ZIP export | ElevenLabs and Grok voices |
-| | News widget and Live Activity |
-| | MLX folder import and Hugging Face on-device downloads |
-| | The full on-device model catalog |
-| | Paid cloud providers |
-| | Markdown, JSON and Obsidian export |
+## What's in this repo
+
+Everything below is free and builds from this tree.
+
+**Chat with your own models**
+- LM Studio, Ollama, oMLX, Jan, Unsloth and other OpenAI-compatible servers on your network
+- Finds LM Studio on your Wi-Fi automatically
+- USB mode: chat with your Mac over a cable, no network needed
+- Custom headers and Cloudflare Access for servers behind a proxy
+- API keys and tokens kept in the Keychain (iOS) and Keystore (Android)
+- Clear connection status: offline, mobile data and unreachable-server messages, with tap-to-retry for unsent messages
+
+**On-device AI**
+- Four starter GGUF models plus one imported GGUF (llama.cpp)
+- Apple Intelligence on supported devices
+
+**Conversations**
+- Personas, including SillyTavern character card import (PNG, JSON, CHARX)
+- Folders, themes, image and file attachments, and vision models
+- Thinking / reasoning controls and global model parameters
+- iCloud sync
+- Export to PDF, TXT and ZIP
+
+**Tools**
+- SearXNG web search
+- MCP servers (LM Studio integrations and your own MCP URLs)
+
+**Voice**
+- Speech-to-text with Whisper
+- System voices, plus on-device Kokoro (English, Spanish, French, Chinese) and Piper (German, Russian) voices
+- Hands-free voice conversation
+
+**Image generation**
+- AUTOMATIC1111 and ComfyUI
+- On-device Stable Diffusion with the starter model
+
+**Everywhere you are**
+- iPhone, iPad, Android, Mac and Windows
+- Apple Watch companion
+- Home-screen widgets
+- Siri and Apple Shortcuts, including your LM Studio MCP tools
+- Arena: race models on built-in prompts to find the right one
+
+**Languages:** English, German, Spanish, French, Russian and Chinese.
 
 ## Build
 
