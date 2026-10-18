@@ -51,6 +51,9 @@ class HomeGlassHeader extends StatelessWidget {
   final VoidCallback onToggleSearch;
   final VoidCallback? onOpenArena;
   final VoidCallback? onNewGroupChat;
+
+  /// Admin/debug only: re-opens the welcome wizard for testing.
+  final VoidCallback? onRunOnboarding;
   final Widget settingsButton;
   final String selectTooltip;
   final String foldersTooltip;
@@ -84,6 +87,7 @@ class HomeGlassHeader extends StatelessWidget {
     required this.onToggleSearch,
     this.onOpenArena,
     this.onNewGroupChat,
+    this.onRunOnboarding,
     required this.settingsButton,
     required this.selectTooltip,
     required this.foldersTooltip,
@@ -151,6 +155,7 @@ class HomeGlassHeader extends StatelessWidget {
                             onToggleSearch: onToggleSearch,
                             onOpenArena: onOpenArena,
                             onNewGroupChat: onNewGroupChat,
+                            onRunOnboarding: onRunOnboarding,
                             settingsButton: settingsButton,
                             selectTooltip: selectTooltip,
                             foldersTooltip: foldersTooltip,
@@ -179,6 +184,7 @@ class _NormalRow extends StatelessWidget {
   final VoidCallback onToggleSearch;
   final VoidCallback? onOpenArena;
   final VoidCallback? onNewGroupChat;
+  final VoidCallback? onRunOnboarding;
   final Widget settingsButton;
   final String selectTooltip;
   final String foldersTooltip;
@@ -198,6 +204,7 @@ class _NormalRow extends StatelessWidget {
     required this.onToggleSearch,
     this.onOpenArena,
     this.onNewGroupChat,
+    this.onRunOnboarding,
     required this.settingsButton,
     required this.selectTooltip,
     required this.foldersTooltip,
@@ -261,6 +268,7 @@ class _NormalRow extends StatelessWidget {
               onSelect: showFolders ? null : onEnterSelection,
               onArena: onOpenArena,
               onNewGroup: onNewGroupChat,
+              onRunOnboarding: onRunOnboarding,
               iconColor: fg,
             ),
             SizedBox(width: actionGap),
@@ -295,6 +303,7 @@ class _GlassActionsMenu extends StatelessWidget {
   final VoidCallback? onSelect;
   final VoidCallback? onArena;
   final VoidCallback? onNewGroup;
+  final VoidCallback? onRunOnboarding;
   final Color iconColor;
 
   const _GlassActionsMenu({
@@ -303,6 +312,7 @@ class _GlassActionsMenu extends StatelessWidget {
     this.onSelect,
     this.onArena,
     this.onNewGroup,
+    this.onRunOnboarding,
     required this.iconColor,
   });
 
@@ -334,6 +344,12 @@ class _GlassActionsMenu extends StatelessWidget {
           label: l10n.newGroupChat,
           icon: Icons.group_add_rounded,
         ),
+      if (onRunOnboarding != null)
+        GlassPopupMenuItem(
+          id: 'onboarding',
+          label: l10n.homeRunOnboarding,
+          icon: Icons.rocket_launch_outlined,
+        ),
     ];
 
     return GlassPopupMenuButton(
@@ -350,6 +366,8 @@ class _GlassActionsMenu extends StatelessWidget {
             onArena?.call();
           case 'group':
             onNewGroup?.call();
+          case 'onboarding':
+            onRunOnboarding?.call();
         }
       },
       child: IgnorePointer(

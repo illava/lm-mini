@@ -33,6 +33,12 @@ class ChatConversation {
   
   bool get isGroupChat => settings['isGroupChat'] == true;
 
+  /// This conversation filed under [targetFolderId]; `null` takes it out of
+  /// any folder (plain `copyWith(folderId: null)` keeps the old folder).
+  ChatConversation movedToFolder(String? targetFolderId) => targetFolderId == null
+      ? copyWith(clearFolderId: true)
+      : copyWith(folderId: targetFolderId);
+
   ChatConversation copyWith({
     String? id,
     String? title,
@@ -41,6 +47,7 @@ class ChatConversation {
     List<String>? messageIds,
     Map<String, dynamic>? settings,
     String? folderId,
+    bool clearFolderId = false,
     String? lastResponseId,
     bool clearLastResponseId = false,
     String? parentConversationId,
@@ -52,7 +59,7 @@ class ChatConversation {
       updatedAt: updatedAt ?? this.updatedAt,
       messageIds: messageIds ?? this.messageIds,
       settings: settings ?? this.settings,
-      folderId: folderId ?? this.folderId,
+      folderId: clearFolderId ? null : (folderId ?? this.folderId),
       lastResponseId: clearLastResponseId ? null : (lastResponseId ?? this.lastResponseId),
       parentConversationId: parentConversationId ?? this.parentConversationId,
     );

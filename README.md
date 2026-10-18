@@ -54,15 +54,15 @@ Everything below is free and builds from this tree.
 - Clear connection status: offline, mobile data and unreachable-server messages, with tap-to-retry for unsent messages
 
 **On-device AI**
-- Four starter GGUF models plus one imported GGUF (llama.cpp)
-- Apple Intelligence on supported devices
+- Six starter GGUF models (Qwen 3.5, Gemma 4, Bonsai 1-bit, LFM 2.5, MiniCPM 5) plus one imported GGUF (llama.cpp)
+- Apple Intelligence on supported devices (iOS 26 / macOS 26), no download
 
 **Conversations**
 - Personas, including SillyTavern character card import (PNG, JSON, CHARX)
 - Folders, themes, image and file attachments, and vision models
 - Thinking / reasoning controls and global model parameters
 - iCloud sync
-- Export to PDF, TXT and ZIP
+- Export to PDF (Latin, Greek and Cyrillic), TXT and ZIP
 
 **Tools**
 - SearXNG web search
@@ -82,7 +82,7 @@ Everything below is free and builds from this tree.
 - Apple Watch companion
 - Home-screen widgets
 - Siri and Apple Shortcuts, including your LM Studio MCP tools
-- Arena: race models on built-in prompts to find the right one
+- Arena: race models on built-in prompts or your own, compare answers side by side, and keep a history of your races
 
 **Languages:** English, German, Spanish, French, Russian and Chinese.
 

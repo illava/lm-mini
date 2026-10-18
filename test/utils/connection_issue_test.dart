@@ -56,7 +56,7 @@ void main() {
       expect(_r(net: NetworkSnapshot.unknown), isNull);
     });
 
-    test('offline beats every stored error', () {
+    test('offline + a failed connection → offline, over other errors', () {
       final i = _r(
         net: _offline,
         chat: 'Model not found',
@@ -64,7 +64,15 @@ void main() {
       );
       expect(i?.kind, ConnectionIssueKind.offline);
       expect(i?.isNetworkState, isTrue);
-      expect(i?.source, ConnectionIssueSource.network);
+      expect(i?.source, ConnectionIssueSource.connection);
+    });
+
+    test('offline with nothing failed → no banner', () {
+      expect(_r(net: _offline), isNull);
+    });
+
+    test('mobile data with a LAN server, nothing failed → no banner', () {
+      expect(_r(net: _mobile), isNull);
     });
 
     test('offline from a failed send is tagged chat (pill expands)', () {
@@ -79,7 +87,7 @@ void main() {
       expect(i?.kind, ConnectionIssueKind.needsWifi);
       expect(i?.host, '192.168.100.178');
       expect(i?.provider, 'LM Studio');
-      expect(i?.source, ConnectionIssueSource.network);
+      expect(i?.source, ConnectionIssueSource.connection);
     });
 
     test('5G send failure → one needsWifi, tagged chat', () {

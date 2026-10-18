@@ -205,6 +205,10 @@ class NetworkStatusBanner extends StatefulWidget {
   /// Also called when the user closes the pill (clear stored errors).
   final VoidCallback? onDismiss;
 
+  /// Closed by the user: stays hidden for the rest of this app session, on
+  /// every chat. (A failed message still shows "Not delivered".)
+  static bool closedThisSession = false;
+
   const NetworkStatusBanner({
     super.key,
     required this.issue,
@@ -217,21 +221,9 @@ class NetworkStatusBanner extends StatefulWidget {
 }
 
 class _NetworkStatusBannerState extends State<NetworkStatusBanner> {
-  /// Dismissed for this exact condition; shows again once it changes.
-  String? _dismissedKey;
-
-  /// Source on the previous build — a new failed send (source turns to
-  /// chat) shows the pill again even if it was closed before.
-  ConnectionIssueSource? _lastSource;
-
   @override
   Widget build(BuildContext context) {
     final issue = widget.issue;
-    if (issue?.source == ConnectionIssueSource.chat &&
-        _lastSource != ConnectionIssueSource.chat) {
-      _dismissedKey = null;
-    }
-    _lastSource = issue?.source;
     final kind = issue?.networkIssue?.kind;
     final usable = issue != null &&
         (kind == NetworkIssueKind.offline ||
@@ -240,7 +232,7 @@ class _NetworkStatusBannerState extends State<NetworkStatusBanner> {
         ? '${kind!.name}|${issue.host}|'
             '${NetworkStatusService.instance.snapshot}'
         : null;
-    final visible = usable && _dismissedKey != key;
+    final visible = usable && !NetworkStatusBanner.closedThisSession;
     return AnimatedSize(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOut,
@@ -340,7 +332,7 @@ class _NetworkStatusBannerState extends State<NetworkStatusBanner> {
                         ),
                         tooltip: l10n.dismiss,
                         onPressed: () {
-                          setState(() => _dismissedKey = key);
+                          setState(() => NetworkStatusBanner.closedThisSession = true);
                           widget.onDismiss?.call();
                         },
                       ),

@@ -2690,7 +2690,7 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const SubscriptionScreen(),
+                      builder: (_) => const SubscriptionScreen(highlight: PaywallFeature.remoteAccess),
                     ),
                   );
                   return;

@@ -3873,23 +3873,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '在 LM Studio 中，打开开发人员模式 → 服务器设置 → 管理令牌以创建或复制您的 API 密钥。';
 
   @override
-  String get welcomeWizardTitle => '欢迎来到LM迷你';
-
-  @override
-  String get welcomeWizardSubtitle =>
-      '通过 LM Studio 与本地网络上运行的 AI 模型聊天。让我们通过几个快速步骤即可完成设置。';
-
-  @override
   String get welcomeWizardThemeTitle => '选择您的主题';
-
-  @override
-  String get welcomeWizardThemeSystemSubtitle => '匹配您的设备设置';
-
-  @override
-  String get welcomeWizardThemeLightSubtitle => '干净明亮';
-
-  @override
-  String get welcomeWizardThemeDarkSubtitle => '轻松护眼';
 
   @override
   String get welcomeWizardAppearanceTitle => '自定义外观';
@@ -3898,32 +3882,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get welcomeWizardAppearancePreviewMessage => '你好！这就是您的聊天消息的外观。';
 
   @override
-  String get welcomeWizardServerTitle => '连接到 LM Studio';
-
-  @override
-  String get welcomeWizardServerSubtitle => '输入本地网络上运行 LM Studio 的计算机的 IP 地址。';
-
-  @override
-  String get welcomeWizardLocalNetworkNote => '当您测试连接时，iOS 会请求本地网络权限。请允许。';
-
-  @override
   String get apiTokenOptionalLabel => 'API 令牌（可选）';
-
-  @override
-  String get welcomeWizardChangeLater => '您稍后可以随时在“设置”中更改此设置。';
-
-  @override
-  String get welcomeWizardFindModelTitle => '找到适合的型号';
-
-  @override
-  String get welcomeWizardFindModelSubtitle =>
-      '比较两个选项，看看哪个在您的设置上更快。大约需要一分钟——如果您已经知道自己想要什么，则可以跳过。';
-
-  @override
-  String get welcomeWizardFindModelHelp => '帮我选一下';
-
-  @override
-  String get welcomeWizardFindModelSkip => '跳过——我自己选择';
 
   @override
   String get welcomeWizardExperienceTitle => '你如何使用人工智能？';
@@ -3957,20 +3916,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get welcomeWizardSetupSubtitlePower => '选择型号或连接桌面服务器。';
 
   @override
-  String get welcomeWizardOnDeviceSection => '在此设备上';
-
-  @override
-  String get welcomeWizardComputerSection => '在您的计算机上';
-
-  @override
-  String get welcomeWizardScanningWifi => '正在查看 Wi-Fi...';
-
-  @override
-  String welcomeWizardFoundCount(int count) {
-    return '找到$count';
-  }
-
-  @override
   String get welcomeWizardModelFasterBlurb => '快速回复。非常适合日常聊天。';
 
   @override
@@ -3999,12 +3944,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get welcomeWizardConnectLmStudio => '连接LM工作室';
-
-  @override
-  String get welcomeWizardConnectOllama => '连接奥拉马';
-
-  @override
-  String get welcomeWizardConnectOmlx => '连接oMLX';
 
   @override
   String get pickColor => '选择颜色';
@@ -4917,15 +4856,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get encryptionKeyUpdated => '加密密钥已更新';
 
   @override
-  String get keepLmMiniAlive => '保留 LM 迷你\n活着';
-
-  @override
-  String get supportTheApp => '支持该应用程序并获得额外福利';
-
-  @override
-  String get mostFeaturesFree => '大多数功能都是免费的 - Pro 有助于支付服务器成本';
-
-  @override
   String get thankYouSupport => '感谢您的支持！';
 
   @override
@@ -4971,16 +4901,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get premiumDisabled => '高级版已禁用';
-
-  @override
-  String supportYearly(String price) {
-    return '支持 — $price/年';
-  }
-
-  @override
-  String supportMonthly(String price) {
-    return '支持 — $price/月';
-  }
 
   @override
   String get welcomeToLmMiniPro => '欢迎来到LM Mini Pro！';
@@ -5127,10 +5047,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get groupChatLockedBanner => '群聊在没有 Pro 的情况下是只读的。升级以发送新消息。';
 
   @override
-  String get premiumArena => '竞技场';
+  String get premiumArena => 'Arena Pro';
 
   @override
-  String get premiumArenaTagline => '并排比较模型';
+  String get premiumArenaTagline => '自定义比赛、云端模型和历史记录';
 
   @override
   String get premiumArenaDescription =>
@@ -5821,12 +5741,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get welcomeWizardRequiresApiKey => '需要 API 密钥';
-
-  @override
-  String get welcomeWizardScanHomeQr => '扫描 LM Mini Home 二维码';
-
-  @override
-  String get welcomeWizardScanHomeQrSubtitle => '通过“与手机共享”与 Mac 配对';
 
   @override
   String welcomeWizardModelsFound(int count) {
@@ -7011,4 +6925,443 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteAccessTurnOffFailed => '无法关闭远程访问，请重试。';
+
+  @override
+  String get appleIntelligenceBadge => '设备内置';
+
+  @override
+  String get appleIntelligenceSubtitle => '无需下载 · 私密 · 可离线使用';
+
+  @override
+  String get appleIntelligenceUse => '使用';
+
+  @override
+  String get appleIntelligenceInUse => '使用中';
+
+  @override
+  String get appleIntelligenceTurnOn => '在“设置”中打开 Apple Intelligence 即可使用';
+
+  @override
+  String get appleIntelligenceGettingReady => 'Apple Intelligence 仍在此设备上准备中';
+
+  @override
+  String get appleIntelligenceNowUsing => '现在与 Apple Intelligence 聊天';
+
+  @override
+  String get onboardingOrDownloadModel => '或下载一个模型';
+
+  @override
+  String get homeRunOnboarding => '运行引导';
+
+  @override
+  String get onboardingDownloadModelTitle => '下载模型';
+
+  @override
+  String get onboardingDownloadModelSubtitle => '在本设备运行 · 私密 · 可离线';
+
+  @override
+  String get onboardingConnectComputerTitle => '连接你的电脑';
+
+  @override
+  String get onboardingConnectComputerSubtitle => 'LM Studio、Ollama、Unsloth 等';
+
+  @override
+  String onboardingServersFound(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '在 Wi‑Fi 中找到 $count 台服务器',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onboardingModelReady(String name) {
+    return '$name 已就绪';
+  }
+
+  @override
+  String onboardingModelDownloading(String name, int percent) {
+    return '正在下载 $name · $percent%';
+  }
+
+  @override
+  String get onboardingChatStyleTitle => '聊天样式';
+
+  @override
+  String get onboardingChatStyleFullWidth => '全宽';
+
+  @override
+  String get onboardingChatStyleFullWidthHint => '回复占满整个屏幕';
+
+  @override
+  String get onboardingChatStyleBubbles => '气泡';
+
+  @override
+  String get onboardingChatStyleBubblesHint => '像发短信一样';
+
+  @override
+  String get firstChatNameQuestion => '你好！我该怎么称呼你？';
+
+  @override
+  String get firstChatNameHint => '你的名字或昵称';
+
+  @override
+  String get firstChatNameSave => '保存';
+
+  @override
+  String get firstChatNameSkip => '以后再说';
+
+  @override
+  String firstChatNameSaved(String name) {
+    return '很高兴认识你，$name！我会记住的。';
+  }
+
+  @override
+  String get firstChatNameMemoryChip => '已保存到记忆';
+
+  @override
+  String get paywallHeadline => '解锁 LM Mini Pro';
+
+  @override
+  String get paywallSubtitle => '网页搜索、云端模型、记忆、远程访问等。';
+
+  @override
+  String paywallFeatureIsPro(String feature) {
+    return '$feature是 Pro 功能';
+  }
+
+  @override
+  String get paywallAlsoIncluded => 'Pro 还包括：';
+
+  @override
+  String paywallMoreFeatures(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '还有 $count 项 Pro 功能',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get paywallShowLess => '收起';
+
+  @override
+  String get paywallGetPro => '获取 Pro';
+
+  @override
+  String paywallPerMonth(String price) {
+    return '$price/月';
+  }
+
+  @override
+  String aiModelsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个 AI 模型',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String modelFamilyOnDevice(int count) {
+    return '本设备上 $count 个';
+  }
+
+  @override
+  String get modelRecommended => '最佳质量';
+
+  @override
+  String get olderModelsTitle => '旧模型';
+
+  @override
+  String get olderModelsSubtitle => '更新前已下载';
+
+  @override
+  String get lockedSearchChip => '搜索';
+
+  @override
+  String get lockedCodeChip => '代码';
+
+  @override
+  String get premiumCodeSandboxTagline => '用真实代码得出精确答案';
+
+  @override
+  String get teaserSearchTitle => '让模型上网搜索';
+
+  @override
+  String get teaserSearchPoint1 => '模型为你查找实时信息：新闻、价格、天气、体育。';
+
+  @override
+  String get teaserSearchPoint2 => '只发送搜索词，绝不发送你的聊天内容。';
+
+  @override
+  String get teaserSearchPoint3 => '无需设置：不用 API 密钥或搜索服务器。答案附带来源。';
+
+  @override
+  String get teaserSearchDemoQuery => '今天东京天气？';
+
+  @override
+  String get teaserSearchDemoResult1 => 'AccuWeather · 东京预报';
+
+  @override
+  String get teaserSearchDemoResult2 => 'timeanddate.com · 东京今天';
+
+  @override
+  String get teaserSearchDemoResult3 => '日本气象厅';
+
+  @override
+  String get teaserSandboxTitle => '让模型运行代码';
+
+  @override
+  String get teaserSandboxPoint1 => '模型编写并运行 Python 或 JavaScript，给出精确答案。';
+
+  @override
+  String get teaserSandboxPoint2 => '适合数学、数据、单位换算和自我检查。';
+
+  @override
+  String get teaserSandboxPoint3 => '代码在隔离的沙盒中运行，绝不在你的设备上运行。';
+
+  @override
+  String get teaserSandboxDemoSafe => '沙盒';
+
+  @override
+  String get teaserSandboxDemoExact => '精确';
+
+  @override
+  String get teaserExportTitle => '把聊天保存到你的笔记里';
+
+  @override
+  String get teaserExportPoint1 => '将任意聊天以 Markdown 直接导出到 Obsidian 库。';
+
+  @override
+  String get teaserExportPoint2 => '也可保存为 PDF、文本或 JSON，或分享到任意应用。';
+
+  @override
+  String get teaserExportPoint3 => '思考过程、代码和图片都会一并保留，格式整齐。';
+
+  @override
+  String get teaserExportDemoFiles => '文件';
+
+  @override
+  String get teaserGroupTitle => '同时与多个 AI 聊天';
+
+  @override
+  String get teaserGroupPoint1 => '把多个角色和模型加入同一个聊天，让它们轮流回答。';
+
+  @override
+  String get teaserGroupPoint2 => '混合使用模型：手机本地模型、LM Studio 或云端模型。';
+
+  @override
+  String get teaserGroupPoint3 => '适合听取不同意见、辩论、角色扮演和头脑风暴。';
+
+  @override
+  String get teaserGroupDemoQuestion => '周末去哪个城市最好？';
+
+  @override
+  String get teaserGroupDemoReply1 => '里斯本：阳光充足，适合步行，美食很多。';
+
+  @override
+  String get teaserGroupDemoReply2 => '我选京都，寺庙和庭园很美。';
+
+  @override
+  String get teaserGroupDemoReply3 => '都不错。秋天里斯本更便宜。';
+
+  @override
+  String get teaserGroupDemoTag => '3 个 AI，一个聊天';
+
+  @override
+  String get newPersonaLabel => '新角色';
+
+  @override
+  String get fabChatLabel => '聊天';
+
+  @override
+  String get fabGroupLabel => '群聊';
+
+  @override
+  String get groupAutonomousPaused => '自动回复已暂停。发送消息或点按名字以继续。';
+
+  @override
+  String get teaserRemoteTitle => '随时随地使用电脑上的 AI';
+
+  @override
+  String get teaserRemotePoint1 => '通过移动数据或任意 Wi‑Fi，与 LM Studio、Ollama 等服务器聊天。';
+
+  @override
+  String get teaserRemotePoint2 => '连接已加密，只有已配对的手机才能接入。同一 Wi‑Fi 下的其他人无法读取。';
+
+  @override
+  String get teaserRemotePoint3 => '中继只转发消息，不会保存。在 LM Mini Connect 中扫码配对一次即可。';
+
+  @override
+  String get teaserRemoteDemoPhone => '手机';
+
+  @override
+  String get teaserRemoteDemoRelay => '安全中继';
+
+  @override
+  String get teaserRemoteDemoTag => '离家也能用';
+
+  @override
+  String get teaserLiveTitle => '离开应用，回复也不停';
+
+  @override
+  String get teaserLivePoint1 => '切换应用或锁屏，回复仍会继续生成。';
+
+  @override
+  String get teaserLivePoint2 => '在锁屏和灵动岛上查看进度。';
+
+  @override
+  String get teaserLivePoint3 => '回复完成时立即提醒你。';
+
+  @override
+  String get teaserLiveDemoWorking => 'LM Mini 正在写回复…';
+
+  @override
+  String get teaserLiveDemoDone => '回复已完成';
+
+  @override
+  String get teaserCompactTitle => '再也不会超出上下文';
+
+  @override
+  String get teaserCompactPoint1 => '聊天太长时，“压缩”会总结较早的内容。';
+
+  @override
+  String get teaserCompactPoint2 => '在同一个聊天中继续，不会丢失上下文。';
+
+  @override
+  String get teaserCompactPoint3 => '轻点一下，占用就会降下来。';
+
+  @override
+  String get teaserCompactDemoSummary => '早前聊天摘要：你的旅行计划、预算和日期。';
+
+  @override
+  String get teaserRemoteDemoServer => '家庭服务器';
+
+  @override
+  String get teaserRemoteDemoQuestion => '总结我的笔记';
+
+  @override
+  String get teaserRemoteDemoAnswer => '来自家中';
+
+  @override
+  String get teaserRemoteDemoBlocked => '已拦截';
+
+  @override
+  String get teaserRemoteDemoEncrypted => '已加密';
+
+  @override
+  String get teaserRemoteDemoPaired => '仅限你的手机';
+
+  @override
+  String get teaserRemoteDemoNotStored => '不保存';
+
+  @override
+  String get teaserLiveDemoIsland => '回复中';
+
+  @override
+  String get teaserLockTitle => '保护你的聊天隐私';
+
+  @override
+  String teaserLockPoint1(String method) {
+    return '离开时 LM Mini 自动锁定，用$method或 PIN 解锁。';
+  }
+
+  @override
+  String get teaserLockPoint2 => '别人拿起你的手机，只会看到锁，而不是你的聊天。';
+
+  @override
+  String get teaserLockPoint3 => '选择多久后重新锁定：立即或几分钟后。';
+
+  @override
+  String get teaserLockDemoUnlocked => '已解锁';
+
+  @override
+  String get teaserLockDemoFingerprint => '指纹';
+
+  @override
+  String appLockSubtitleBiometric(String method) {
+    return '关闭应用后需要$method或 PIN';
+  }
+
+  @override
+  String get biometricFaceId => '面容 ID';
+
+  @override
+  String get biometricTouchId => '触控 ID';
+
+  @override
+  String get biometricFingerprint => '指纹';
+
+  @override
+  String get biometricFaceUnlock => '人脸解锁';
+
+  @override
+  String get teaserBranchTitle => '换条路试试，原来的也不会丢';
+
+  @override
+  String get teaserBranchPoint1 => '从任意消息创建分支，探索不同的问题或回答。';
+
+  @override
+  String get teaserBranchPoint2 => '原始对话保持原样。';
+
+  @override
+  String get teaserBranchPoint3 => '随时在分支间切换比较。';
+
+  @override
+  String get teaserBranchDemoQuestion => '规划一次三日游';
+
+  @override
+  String get teaserBranchDemoA => '分支 A';
+
+  @override
+  String get teaserBranchDemoB => '分支 B';
+
+  @override
+  String get teaserBranchDemoReplyA => '里斯本海滩游';
+
+  @override
+  String get teaserBranchDemoReplyB => '阿尔卑斯徒步';
+
+  @override
+  String get teaserStatsTitle => '看看模型的真实表现';
+
+  @override
+  String get teaserStatsPoint1 => '每个模型的速度、首个 token 时间和 token 数量。';
+
+  @override
+  String get teaserStatsPoint2 => '一眼找出手机或电脑上最快的模型。';
+
+  @override
+  String get teaserStatsPoint3 => '私密保存在你的账户中，换新设备也能看到。';
+
+  @override
+  String get teaserStatsDemoMessages => '条消息';
+
+  @override
+  String get teaserStatsDemoFirstToken => '首个 token';
+
+  @override
+  String get teaserBackupTitle => '私密备份你的聊天';
+
+  @override
+  String get teaserBackupPoint1 => '聊天在上传前就在手机上用你自己的口令加密。';
+
+  @override
+  String get teaserBackupPoint2 => '连我们也无法读取。';
+
+  @override
+  String get teaserBackupPoint3 => '在新手机上用口令即可全部恢复。';
+
+  @override
+  String get teaserBackupDemoThis => '这部手机';
+
+  @override
+  String get teaserBackupDemoNew => '新手机';
+
+  @override
+  String get teaserBackupDemoRestored => '聊天已恢复';
 }

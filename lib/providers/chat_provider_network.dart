@@ -4,8 +4,9 @@ part of 'chat_provider.dart';
 class _LanStreamTarget {
   final String provider;
   final String host;
+  final Uri uri;
 
-  const _LanStreamTarget(this.provider, this.host);
+  const _LanStreamTarget(this.provider, this.host, this.uri);
 }
 
 /// Network preflight + mid-stream Wi‑Fi loss for server-backed chat sends.
@@ -112,16 +113,22 @@ extension _NetworkPreflight on ChatProvider {
 
     if (result == ProbeResult.ok) {
       if (scope == HostScope.localNetwork) {
-        _activeLanTarget = _LanStreamTarget(name, host);
+        _activeLanTarget = _LanStreamTarget(name, host, uri);
       }
       return;
     }
 
-    // VPN reported (iOS shows any tunnel as "other") but it does not route
-    // the home LAN, and there is no Wi‑Fi: the mobile-data copy is clearer.
-    if (scope == HostScope.localNetwork &&
-        !net.hasLocalNetwork &&
-        net.hasMobile) {
+    // The server really can't be reached: now say why, from the phone side.
+    if (net.isOffline) {
+      throw NetworkPreflightException(
+        NetworkPreflightError.offlineMessage,
+        detail: '$tag no network connection; $hostPort did not answer '
+            '(${result.name}).',
+      );
+    }
+    // No Wi‑Fi (a VPN, reported or not, doesn't route the home LAN): the
+    // mobile-data copy is clearer than "can't reach".
+    if (scope == HostScope.localNetwork && !net.hasLocalNetwork) {
       throw NetworkPreflightException(
         NetworkPreflightError.needsWifiMessage(name, host),
         detail: '$tag mobile data only; $hostPort did not answer '
@@ -133,6 +140,7 @@ extension _NetworkPreflight on ChatProvider {
     // permission prompt. Let the real request (8 s connect cap) handle it.
     if (result == ProbeResult.timeout &&
         Platform.isIOS &&
+        net.hasLocalNetwork &&
         scope != HostScope.public &&
         !ServerReachability.hasEverReachedLocalHost) {
       debugPrint('📶 First LAN probe timed out on iOS — letting request run');
@@ -209,6 +217,16 @@ extension _NetworkPreflight on ChatProvider {
         timeout: const Duration(milliseconds: 800),
       );
       if (!_lostLan(now)) return;
+      if (!_isSendingMessage || !identical(_activeLanTarget, target)) return;
+      // Wi‑Fi gone, but a VPN (often unreported on iOS) may still reach the
+      // server: only stop when it really doesn't answer. The network just
+      // changed, so a cached "reachable" from before doesn't count.
+      ServerReachability.clearCache();
+      final reach = await ServerReachability.probe(
+        target.uri,
+        timeout: const Duration(seconds: 2),
+      );
+      if (reach == ProbeResult.ok) return;
       if (!_isSendingMessage || !identical(_activeLanTarget, target)) return;
       if (!LMStudioService.hasActiveStreams &&
           !OllamaService.hasActiveStreams) {

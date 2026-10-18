@@ -278,6 +278,15 @@ class FeatureRequestService {
     return null;
   }
 
+  /// One ticket by id (e.g. from a support push), or null if it is gone.
+  Future<FeatureRequest?> getRequest(String requestId) async {
+    await _ensureSignedIn();
+    final doc =
+        await _firestore.collection(_collectionPath).doc(requestId).get();
+    if (!doc.exists) return null;
+    return FeatureRequest.fromFirestore(doc);
+  }
+
   // Submit a new feature request
   Future<void> submitRequest({
     required String title,

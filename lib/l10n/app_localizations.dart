@@ -7360,41 +7360,11 @@ abstract class AppLocalizations {
   /// **'In LM Studio, open Developer mode → Server settings → Manage tokens to create or copy your API key.'**
   String get lmStudioAuthHelpHint;
 
-  /// No description provided for @welcomeWizardTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Welcome to LM Mini'**
-  String get welcomeWizardTitle;
-
-  /// No description provided for @welcomeWizardSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Chat with AI models running on your local network via LM Studio. Let\'s get you set up in a few quick steps.'**
-  String get welcomeWizardSubtitle;
-
   /// No description provided for @welcomeWizardThemeTitle.
   ///
   /// In en, this message translates to:
   /// **'Choose Your Theme'**
   String get welcomeWizardThemeTitle;
-
-  /// No description provided for @welcomeWizardThemeSystemSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Match your device settings'**
-  String get welcomeWizardThemeSystemSubtitle;
-
-  /// No description provided for @welcomeWizardThemeLightSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Clean and bright'**
-  String get welcomeWizardThemeLightSubtitle;
-
-  /// No description provided for @welcomeWizardThemeDarkSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Easy on the eyes'**
-  String get welcomeWizardThemeDarkSubtitle;
 
   /// No description provided for @welcomeWizardAppearanceTitle.
   ///
@@ -7408,59 +7378,11 @@ abstract class AppLocalizations {
   /// **'Hello! This is how your chat messages will look.'**
   String get welcomeWizardAppearancePreviewMessage;
 
-  /// No description provided for @welcomeWizardServerTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Connect to LM Studio'**
-  String get welcomeWizardServerTitle;
-
-  /// No description provided for @welcomeWizardServerSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Enter the IP address of the computer running LM Studio on your local network.'**
-  String get welcomeWizardServerSubtitle;
-
-  /// No description provided for @welcomeWizardLocalNetworkNote.
-  ///
-  /// In en, this message translates to:
-  /// **'iOS will ask for local network permission when you test the connection. Please allow it.'**
-  String get welcomeWizardLocalNetworkNote;
-
   /// No description provided for @apiTokenOptionalLabel.
   ///
   /// In en, this message translates to:
   /// **'API Token (optional)'**
   String get apiTokenOptionalLabel;
-
-  /// No description provided for @welcomeWizardChangeLater.
-  ///
-  /// In en, this message translates to:
-  /// **'You can always change this later in Settings.'**
-  String get welcomeWizardChangeLater;
-
-  /// No description provided for @welcomeWizardFindModelTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Find a model that fits'**
-  String get welcomeWizardFindModelTitle;
-
-  /// No description provided for @welcomeWizardFindModelSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Race two options and see which is faster on your setup. Takes about a minute — or skip if you already know what you want.'**
-  String get welcomeWizardFindModelSubtitle;
-
-  /// No description provided for @welcomeWizardFindModelHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Help me pick'**
-  String get welcomeWizardFindModelHelp;
-
-  /// No description provided for @welcomeWizardFindModelSkip.
-  ///
-  /// In en, this message translates to:
-  /// **'Skip — I\'ll choose myself'**
-  String get welcomeWizardFindModelSkip;
 
   /// No description provided for @welcomeWizardExperienceTitle.
   ///
@@ -7522,30 +7444,6 @@ abstract class AppLocalizations {
   /// **'Pick a model or connect a desktop server.'**
   String get welcomeWizardSetupSubtitlePower;
 
-  /// No description provided for @welcomeWizardOnDeviceSection.
-  ///
-  /// In en, this message translates to:
-  /// **'On this device'**
-  String get welcomeWizardOnDeviceSection;
-
-  /// No description provided for @welcomeWizardComputerSection.
-  ///
-  /// In en, this message translates to:
-  /// **'On your computer'**
-  String get welcomeWizardComputerSection;
-
-  /// No description provided for @welcomeWizardScanningWifi.
-  ///
-  /// In en, this message translates to:
-  /// **'Looking on Wi‑Fi…'**
-  String get welcomeWizardScanningWifi;
-
-  /// No description provided for @welcomeWizardFoundCount.
-  ///
-  /// In en, this message translates to:
-  /// **'Found {count}'**
-  String welcomeWizardFoundCount(int count);
-
   /// No description provided for @welcomeWizardModelFasterBlurb.
   ///
   /// In en, this message translates to:
@@ -7605,18 +7503,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connect LM Studio'**
   String get welcomeWizardConnectLmStudio;
-
-  /// No description provided for @welcomeWizardConnectOllama.
-  ///
-  /// In en, this message translates to:
-  /// **'Connect Ollama'**
-  String get welcomeWizardConnectOllama;
-
-  /// No description provided for @welcomeWizardConnectOmlx.
-  ///
-  /// In en, this message translates to:
-  /// **'Connect oMLX'**
-  String get welcomeWizardConnectOmlx;
 
   /// No description provided for @pickColor.
   ///
@@ -9275,24 +9161,6 @@ abstract class AppLocalizations {
   /// **'Encryption key updated'**
   String get encryptionKeyUpdated;
 
-  /// No description provided for @keepLmMiniAlive.
-  ///
-  /// In en, this message translates to:
-  /// **'Keep LM Mini\nAlive'**
-  String get keepLmMiniAlive;
-
-  /// No description provided for @supportTheApp.
-  ///
-  /// In en, this message translates to:
-  /// **'Support the app & get premium perks'**
-  String get supportTheApp;
-
-  /// No description provided for @mostFeaturesFree.
-  ///
-  /// In en, this message translates to:
-  /// **'Most features are free — Pro helps cover server costs'**
-  String get mostFeaturesFree;
-
   /// No description provided for @thankYouSupport.
   ///
   /// In en, this message translates to:
@@ -9376,18 +9244,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Premium disabled'**
   String get premiumDisabled;
-
-  /// No description provided for @supportYearly.
-  ///
-  /// In en, this message translates to:
-  /// **'Support — {price}/year'**
-  String supportYearly(String price);
-
-  /// No description provided for @supportMonthly.
-  ///
-  /// In en, this message translates to:
-  /// **'Support — {price}/month'**
-  String supportMonthly(String price);
 
   /// No description provided for @welcomeToLmMiniPro.
   ///
@@ -9668,13 +9524,13 @@ abstract class AppLocalizations {
   /// No description provided for @premiumArena.
   ///
   /// In en, this message translates to:
-  /// **'Arena'**
+  /// **'Arena Pro'**
   String get premiumArena;
 
   /// No description provided for @premiumArenaTagline.
   ///
   /// In en, this message translates to:
-  /// **'Compare models side-by-side'**
+  /// **'Custom races, cloud models & history'**
   String get premiumArenaTagline;
 
   /// No description provided for @premiumArenaDescription.
@@ -10954,18 +10810,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Requires API Key'**
   String get welcomeWizardRequiresApiKey;
-
-  /// No description provided for @welcomeWizardScanHomeQr.
-  ///
-  /// In en, this message translates to:
-  /// **'Scan LM Mini Home QR'**
-  String get welcomeWizardScanHomeQr;
-
-  /// No description provided for @welcomeWizardScanHomeQrSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Pair with your Mac from Share with phone'**
-  String get welcomeWizardScanHomeQrSubtitle;
 
   /// No description provided for @welcomeWizardModelsFound.
   ///
@@ -13079,6 +12923,810 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t turn off Remote Access. Try again.'**
   String get remoteAccessTurnOffFailed;
+
+  /// Small label above 'Apple Intelligence' on the built-in model card.
+  ///
+  /// In en, this message translates to:
+  /// **'Built into this device'**
+  String get appleIntelligenceBadge;
+
+  /// Apple Intelligence card subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No download · private · works offline'**
+  String get appleIntelligenceSubtitle;
+
+  /// Button: switch chat to Apple Intelligence.
+  ///
+  /// In en, this message translates to:
+  /// **'Use'**
+  String get appleIntelligenceUse;
+
+  /// Shown on the Apple Intelligence card when it is the active model.
+  ///
+  /// In en, this message translates to:
+  /// **'In use'**
+  String get appleIntelligenceInUse;
+
+  /// Apple Intelligence card when the device supports it but it is turned off.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on Apple Intelligence in Settings to use it'**
+  String get appleIntelligenceTurnOn;
+
+  /// Apple Intelligence card while the system model is still downloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Intelligence is still getting ready on this device'**
+  String get appleIntelligenceGettingReady;
+
+  /// Snackbar after choosing Apple Intelligence.
+  ///
+  /// In en, this message translates to:
+  /// **'Now chatting with Apple Intelligence'**
+  String get appleIntelligenceNowUsing;
+
+  /// Onboarding: divider between Apple Intelligence and the downloadable model picks.
+  ///
+  /// In en, this message translates to:
+  /// **'Or download a model'**
+  String get onboardingOrDownloadModel;
+
+  /// Admin-only ⋯ menu item that opens the onboarding wizard for testing.
+  ///
+  /// In en, this message translates to:
+  /// **'Run onboarding'**
+  String get homeRunOnboarding;
+
+  /// No description provided for @onboardingDownloadModelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Download a model'**
+  String get onboardingDownloadModelTitle;
+
+  /// No description provided for @onboardingDownloadModelSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Runs on this device · private · works offline'**
+  String get onboardingDownloadModelSubtitle;
+
+  /// No description provided for @onboardingConnectComputerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your computer'**
+  String get onboardingConnectComputerTitle;
+
+  /// No description provided for @onboardingConnectComputerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'LM Studio, Ollama, Unsloth and more'**
+  String get onboardingConnectComputerSubtitle;
+
+  /// Onboarding: green line on the Connect your computer card when servers were found on the network.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 server found on your Wi‑Fi} other{{count} servers found on your Wi‑Fi}}'**
+  String onboardingServersFound(int count);
+
+  /// Onboarding: a downloaded model is ready to chat.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is ready'**
+  String onboardingModelReady(String name);
+
+  /// Onboarding: download progress on the Download a model card.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {name} · {percent}%'**
+  String onboardingModelDownloading(String name, int percent);
+
+  /// No description provided for @onboardingChatStyleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat style'**
+  String get onboardingChatStyleTitle;
+
+  /// Onboarding: chat look where assistant replies span the full width (like ChatGPT).
+  ///
+  /// In en, this message translates to:
+  /// **'Full width'**
+  String get onboardingChatStyleFullWidth;
+
+  /// No description provided for @onboardingChatStyleFullWidthHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Replies use the whole screen'**
+  String get onboardingChatStyleFullWidthHint;
+
+  /// Onboarding: chat look where both sides use message bubbles (like SMS).
+  ///
+  /// In en, this message translates to:
+  /// **'Bubbles'**
+  String get onboardingChatStyleBubbles;
+
+  /// No description provided for @onboardingChatStyleBubblesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Like texting'**
+  String get onboardingChatStyleBubblesHint;
+
+  /// First empty chat: asks the user for a name to use (shown once).
+  ///
+  /// In en, this message translates to:
+  /// **'Hi! What should I call you?'**
+  String get firstChatNameQuestion;
+
+  /// No description provided for @firstChatNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your name or a nickname'**
+  String get firstChatNameHint;
+
+  /// No description provided for @firstChatNameSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get firstChatNameSave;
+
+  /// No description provided for @firstChatNameSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get firstChatNameSkip;
+
+  /// First empty chat: confirmation after saving the name.
+  ///
+  /// In en, this message translates to:
+  /// **'Nice to meet you, {name}! I\'ll remember that.'**
+  String firstChatNameSaved(String name);
+
+  /// No description provided for @firstChatNameMemoryChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to Memory'**
+  String get firstChatNameMemoryChip;
+
+  /// No description provided for @paywallHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock LM Mini Pro'**
+  String get paywallHeadline;
+
+  /// No description provided for @paywallSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Web search, cloud models, memory, remote access and more.'**
+  String get paywallSubtitle;
+
+  /// Paywall headline when opened from a Pro feature, e.g. "Arena is a Pro feature".
+  ///
+  /// In en, this message translates to:
+  /// **'{feature} is a Pro feature'**
+  String paywallFeatureIsPro(String feature);
+
+  /// No description provided for @paywallAlsoIncluded.
+  ///
+  /// In en, this message translates to:
+  /// **'Pro also includes:'**
+  String get paywallAlsoIncluded;
+
+  /// Paywall: link that expands the rest of the Pro feature list.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{+1 more Pro feature} other{+{count} more Pro features}}'**
+  String paywallMoreFeatures(int count);
+
+  /// No description provided for @paywallShowLess.
+  ///
+  /// In en, this message translates to:
+  /// **'Show less'**
+  String get paywallShowLess;
+
+  /// Paywall: main purchase button (the price is shown on the selected plan above it).
+  ///
+  /// In en, this message translates to:
+  /// **'Get Pro'**
+  String get paywallGetPro;
+
+  /// Paywall: yearly price shown per month under the yearly plan, e.g. "$2.50/mo".
+  ///
+  /// In en, this message translates to:
+  /// **'{price}/mo'**
+  String paywallPerMonth(String price);
+
+  /// Model family card: how many AI models the family has.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 AI model} other{{count} AI models}}'**
+  String aiModelsCount(int count);
+
+  /// Model family card: how many of its models are downloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} on this device'**
+  String modelFamilyOnDevice(int count);
+
+  /// Badge on the one model with the best quality that runs well on this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Best quality'**
+  String get modelRecommended;
+
+  /// On-device list: family card for models downloaded before they were removed from the catalog.
+  ///
+  /// In en, this message translates to:
+  /// **'Older models'**
+  String get olderModelsTitle;
+
+  /// No description provided for @olderModelsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded before the update'**
+  String get olderModelsSubtitle;
+
+  /// Composer: locked Pro Search chip shown to free users.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get lockedSearchChip;
+
+  /// No description provided for @lockedCodeChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Code'**
+  String get lockedCodeChip;
+
+  /// No description provided for @premiumCodeSandboxTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'Exact answers from real code'**
+  String get premiumCodeSandboxTagline;
+
+  /// No description provided for @teaserSearchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let your model search the web'**
+  String get teaserSearchTitle;
+
+  /// No description provided for @teaserSearchPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Your model looks up live info for you: news, prices, weather, sports.'**
+  String get teaserSearchPoint1;
+
+  /// No description provided for @teaserSearchPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the search words are sent to the web, never your chat.'**
+  String get teaserSearchPoint2;
+
+  /// No description provided for @teaserSearchPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'No setup: no API keys or search server. Answers come with sources.'**
+  String get teaserSearchPoint3;
+
+  /// No description provided for @teaserSearchDemoQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'Weather in Tokyo today?'**
+  String get teaserSearchDemoQuery;
+
+  /// No description provided for @teaserSearchDemoResult1.
+  ///
+  /// In en, this message translates to:
+  /// **'AccuWeather · Tokyo forecast'**
+  String get teaserSearchDemoResult1;
+
+  /// No description provided for @teaserSearchDemoResult2.
+  ///
+  /// In en, this message translates to:
+  /// **'timeanddate.com · Today in Tokyo'**
+  String get teaserSearchDemoResult2;
+
+  /// No description provided for @teaserSearchDemoResult3.
+  ///
+  /// In en, this message translates to:
+  /// **'Japan Meteorological Agency'**
+  String get teaserSearchDemoResult3;
+
+  /// No description provided for @teaserSandboxTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let your model run code'**
+  String get teaserSandboxTitle;
+
+  /// No description provided for @teaserSandboxPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Your model writes Python or JavaScript and runs it to get exact answers.'**
+  String get teaserSandboxPoint1;
+
+  /// No description provided for @teaserSandboxPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Great for math, data, unit conversions and checking its own work.'**
+  String get teaserSandboxPoint2;
+
+  /// No description provided for @teaserSandboxPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Code runs in a sealed sandbox, never on your device.'**
+  String get teaserSandboxPoint3;
+
+  /// No description provided for @teaserSandboxDemoSafe.
+  ///
+  /// In en, this message translates to:
+  /// **'Sandbox'**
+  String get teaserSandboxDemoSafe;
+
+  /// No description provided for @teaserSandboxDemoExact.
+  ///
+  /// In en, this message translates to:
+  /// **'exact answer'**
+  String get teaserSandboxDemoExact;
+
+  /// No description provided for @teaserExportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save chats where you keep your notes'**
+  String get teaserExportTitle;
+
+  /// No description provided for @teaserExportPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Export any chat as Markdown straight into your Obsidian vault.'**
+  String get teaserExportPoint1;
+
+  /// No description provided for @teaserExportPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Or save it as PDF, text or JSON, or share it to any app.'**
+  String get teaserExportPoint2;
+
+  /// No description provided for @teaserExportPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking, code and images come along, nicely formatted.'**
+  String get teaserExportPoint3;
+
+  /// No description provided for @teaserExportDemoFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get teaserExportDemoFiles;
+
+  /// No description provided for @teaserGroupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat with several AIs at once'**
+  String get teaserGroupTitle;
+
+  /// No description provided for @teaserGroupPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Add personas and models to one chat and let them answer in turn.'**
+  String get teaserGroupPoint1;
+
+  /// No description provided for @teaserGroupPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Mix models: a local one on your phone, LM Studio, or a cloud model.'**
+  String get teaserGroupPoint2;
+
+  /// No description provided for @teaserGroupPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Great for second opinions, debates, role-play and brainstorming.'**
+  String get teaserGroupPoint3;
+
+  /// No description provided for @teaserGroupDemoQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Best city for a weekend trip?'**
+  String get teaserGroupDemoQuestion;
+
+  /// No description provided for @teaserGroupDemoReply1.
+  ///
+  /// In en, this message translates to:
+  /// **'Lisbon: sunny, walkable, great food.'**
+  String get teaserGroupDemoReply1;
+
+  /// No description provided for @teaserGroupDemoReply2.
+  ///
+  /// In en, this message translates to:
+  /// **'I’d pick Kyoto for temples and gardens.'**
+  String get teaserGroupDemoReply2;
+
+  /// No description provided for @teaserGroupDemoReply3.
+  ///
+  /// In en, this message translates to:
+  /// **'Both good. Lisbon is cheaper in autumn.'**
+  String get teaserGroupDemoReply3;
+
+  /// No description provided for @teaserGroupDemoTag.
+  ///
+  /// In en, this message translates to:
+  /// **'3 AIs, one chat'**
+  String get teaserGroupDemoTag;
+
+  /// Home persona row: tile that creates a new persona.
+  ///
+  /// In en, this message translates to:
+  /// **'New Persona'**
+  String get newPersonaLabel;
+
+  /// No description provided for @fabChatLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat'**
+  String get fabChatLabel;
+
+  /// No description provided for @fabGroupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Group'**
+  String get fabGroupLabel;
+
+  /// Group chat: autonomous mode stopped after the reply limit since the last user message.
+  ///
+  /// In en, this message translates to:
+  /// **'Autonomous replies paused. Send a message or tap a name to continue.'**
+  String get groupAutonomousPaused;
+
+  /// No description provided for @teaserRemoteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your computer’s AI from anywhere'**
+  String get teaserRemoteTitle;
+
+  /// No description provided for @teaserRemotePoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat with LM Studio, Ollama and your other servers on mobile data or any Wi‑Fi.'**
+  String get teaserRemotePoint1;
+
+  /// No description provided for @teaserRemotePoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection is encrypted and only your paired phone can get in. People on the same Wi‑Fi can’t read it.'**
+  String get teaserRemotePoint2;
+
+  /// No description provided for @teaserRemotePoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'The relay passes messages through without saving them. Pair once with a QR code in LM Mini Connect.'**
+  String get teaserRemotePoint3;
+
+  /// No description provided for @teaserRemoteDemoPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone'**
+  String get teaserRemoteDemoPhone;
+
+  /// No description provided for @teaserRemoteDemoRelay.
+  ///
+  /// In en, this message translates to:
+  /// **'Secure relay'**
+  String get teaserRemoteDemoRelay;
+
+  /// No description provided for @teaserRemoteDemoTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Works away from home'**
+  String get teaserRemoteDemoTag;
+
+  /// No description provided for @teaserLiveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Replies keep going when you leave the app'**
+  String get teaserLiveTitle;
+
+  /// No description provided for @teaserLivePoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch apps or lock your phone: the reply keeps generating.'**
+  String get teaserLivePoint1;
+
+  /// No description provided for @teaserLivePoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch progress on the Lock Screen and Dynamic Island.'**
+  String get teaserLivePoint2;
+
+  /// No description provided for @teaserLivePoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a heads-up the moment the answer is ready.'**
+  String get teaserLivePoint3;
+
+  /// No description provided for @teaserLiveDemoWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'LM Mini is writing a reply…'**
+  String get teaserLiveDemoWorking;
+
+  /// No description provided for @teaserLiveDemoDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply ready'**
+  String get teaserLiveDemoDone;
+
+  /// No description provided for @teaserCompactTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Never hit the context limit'**
+  String get teaserCompactTitle;
+
+  /// No description provided for @teaserCompactPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'When a chat gets too long for the model, Compact sums up the older part.'**
+  String get teaserCompactPoint1;
+
+  /// No description provided for @teaserCompactPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep chatting in the same conversation without losing the thread.'**
+  String get teaserCompactPoint2;
+
+  /// No description provided for @teaserCompactPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'One tap, and the meter drops back down.'**
+  String get teaserCompactPoint3;
+
+  /// No description provided for @teaserCompactDemoSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary of the earlier chat: your trip plan, budget and dates.'**
+  String get teaserCompactDemoSummary;
+
+  /// No description provided for @teaserRemoteDemoServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Home Server'**
+  String get teaserRemoteDemoServer;
+
+  /// No description provided for @teaserRemoteDemoQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize my notes'**
+  String get teaserRemoteDemoQuestion;
+
+  /// No description provided for @teaserRemoteDemoAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent from home'**
+  String get teaserRemoteDemoAnswer;
+
+  /// No description provided for @teaserRemoteDemoBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get teaserRemoteDemoBlocked;
+
+  /// No description provided for @teaserRemoteDemoEncrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted'**
+  String get teaserRemoteDemoEncrypted;
+
+  /// No description provided for @teaserRemoteDemoPaired.
+  ///
+  /// In en, this message translates to:
+  /// **'Paired phone only'**
+  String get teaserRemoteDemoPaired;
+
+  /// No description provided for @teaserRemoteDemoNotStored.
+  ///
+  /// In en, this message translates to:
+  /// **'Not stored'**
+  String get teaserRemoteDemoNotStored;
+
+  /// No description provided for @teaserLiveDemoIsland.
+  ///
+  /// In en, this message translates to:
+  /// **'Replying'**
+  String get teaserLiveDemoIsland;
+
+  /// No description provided for @teaserLockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your chats private'**
+  String get teaserLockTitle;
+
+  /// No description provided for @teaserLockPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'LM Mini locks when you leave and opens with {method} or your PIN.'**
+  String teaserLockPoint1(String method);
+
+  /// No description provided for @teaserLockPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone picking up your phone sees a lock, not your chats.'**
+  String get teaserLockPoint2;
+
+  /// No description provided for @teaserLockPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how soon it locks again: right away or after a few minutes.'**
+  String get teaserLockPoint3;
+
+  /// No description provided for @teaserLockDemoUnlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlocked'**
+  String get teaserLockDemoUnlocked;
+
+  /// No description provided for @teaserLockDemoFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'Fingerprint'**
+  String get teaserLockDemoFingerprint;
+
+  /// Settings App Lock row: method is Face ID / Touch ID / fingerprint / face unlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Require {method} or a PIN after the app is closed'**
+  String appLockSubtitleBiometric(String method);
+
+  /// No description provided for @biometricFaceId.
+  ///
+  /// In en, this message translates to:
+  /// **'Face ID'**
+  String get biometricFaceId;
+
+  /// No description provided for @biometricTouchId.
+  ///
+  /// In en, this message translates to:
+  /// **'Touch ID'**
+  String get biometricTouchId;
+
+  /// No description provided for @biometricFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'fingerprint'**
+  String get biometricFingerprint;
+
+  /// No description provided for @biometricFaceUnlock.
+  ///
+  /// In en, this message translates to:
+  /// **'face unlock'**
+  String get biometricFaceUnlock;
+
+  /// No description provided for @teaserBranchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Try another path without losing this one'**
+  String get teaserBranchTitle;
+
+  /// No description provided for @teaserBranchPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Branch from any message to explore a different question or answer.'**
+  String get teaserBranchPoint1;
+
+  /// No description provided for @teaserBranchPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'The original conversation stays exactly as it was.'**
+  String get teaserBranchPoint2;
+
+  /// No description provided for @teaserBranchPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch between branches any time to compare.'**
+  String get teaserBranchPoint3;
+
+  /// No description provided for @teaserBranchDemoQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Plan a 3-day trip'**
+  String get teaserBranchDemoQuestion;
+
+  /// No description provided for @teaserBranchDemoA.
+  ///
+  /// In en, this message translates to:
+  /// **'Branch A'**
+  String get teaserBranchDemoA;
+
+  /// No description provided for @teaserBranchDemoB.
+  ///
+  /// In en, this message translates to:
+  /// **'Branch B'**
+  String get teaserBranchDemoB;
+
+  /// No description provided for @teaserBranchDemoReplyA.
+  ///
+  /// In en, this message translates to:
+  /// **'Beach days in Lisbon'**
+  String get teaserBranchDemoReplyA;
+
+  /// No description provided for @teaserBranchDemoReplyB.
+  ///
+  /// In en, this message translates to:
+  /// **'Hiking in the Alps'**
+  String get teaserBranchDemoReplyB;
+
+  /// No description provided for @teaserStatsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'See how your models really perform'**
+  String get teaserStatsTitle;
+
+  /// No description provided for @teaserStatsPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed, first-token time and token counts for every model you use.'**
+  String get teaserStatsPoint1;
+
+  /// No description provided for @teaserStatsPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Spot the fastest model on your phone or computer at a glance.'**
+  String get teaserStatsPoint2;
+
+  /// No description provided for @teaserStatsPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved privately to your account, so they follow you to a new device.'**
+  String get teaserStatsPoint3;
+
+  /// No description provided for @teaserStatsDemoMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'messages'**
+  String get teaserStatsDemoMessages;
+
+  /// No description provided for @teaserStatsDemoFirstToken.
+  ///
+  /// In en, this message translates to:
+  /// **'first token'**
+  String get teaserStatsDemoFirstToken;
+
+  /// No description provided for @teaserBackupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up your chats, privately'**
+  String get teaserBackupTitle;
+
+  /// No description provided for @teaserBackupPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats are encrypted on your phone with your own passphrase before upload.'**
+  String get teaserBackupPoint1;
+
+  /// No description provided for @teaserBackupPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Not even we can read them.'**
+  String get teaserBackupPoint2;
+
+  /// No description provided for @teaserBackupPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore everything on a new phone with your passphrase.'**
+  String get teaserBackupPoint3;
+
+  /// No description provided for @teaserBackupDemoThis.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone'**
+  String get teaserBackupDemoThis;
+
+  /// No description provided for @teaserBackupDemoNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New phone'**
+  String get teaserBackupDemoNew;
+
+  /// No description provided for @teaserBackupDemoRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats restored'**
+  String get teaserBackupDemoRestored;
 }
 
 class _AppLocalizationsDelegate

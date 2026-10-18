@@ -1353,14 +1353,12 @@ class _VoiceInputPanelState extends State<VoiceInputPanel>
       // Streaming TTS: feed text sentence-by-sentence as it arrives
       final settings = context.read<SettingsProvider>().settings;
       final ttsProvider = TtsEngine.effective(settings.voiceTtsProvider);
-      final useStreamingTts =
-          (ttsProvider == 'kokoro' && _kokoroTts.isInitialized) ||
-              (ttsProvider == 'kokoro_remote' &&
-                  _remoteKokoroTts.isInitialized) ||
-              (ttsProvider == TtsEngine.elevenLabs &&
-                  _elevenLabsTts.isInitialized) ||
-              (ttsProvider == TtsEngine.grok &&
-                  _grokTts.isInitialized);
+      final useStreamingTts = (ttsProvider == 'kokoro' &&
+              _kokoroTts.isInitialized) ||
+          (ttsProvider == 'kokoro_remote' && _remoteKokoroTts.isInitialized) ||
+          (ttsProvider == TtsEngine.elevenLabs &&
+              _elevenLabsTts.isInitialized) ||
+          (ttsProvider == TtsEngine.grok && _grokTts.isInitialized);
       if (useStreamingTts) {
         final isRemote = ttsProvider == 'kokoro_remote';
         final isElevenLabs = ttsProvider == TtsEngine.elevenLabs;
@@ -1746,6 +1744,31 @@ class _VoiceInputPanelState extends State<VoiceInputPanel>
     }
   }
 
+  /// Round mic button that stops recording (red while the mic is live).
+  Widget _micStopButton({
+    required VoidCallback onPressed,
+    required bool live,
+    required String tooltip,
+    required ColorScheme colorScheme,
+  }) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: IconButton.filled(
+        onPressed: onPressed,
+        tooltip: tooltip,
+        iconSize: 26,
+        icon: Icon(live ? Icons.mic_rounded : Icons.mic_off_rounded),
+        style: IconButton.styleFrom(
+          minimumSize: const Size(56, 56),
+          backgroundColor:
+              live ? colorScheme.error : colorScheme.errorContainer,
+          foregroundColor: live ? colorScheme.onError : colorScheme.error,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -1879,14 +1902,11 @@ class _VoiceInputPanelState extends State<VoiceInputPanel>
                     ),
                   ),
                   if (_state == VoicePanelState.listening)
-                    FilledButton.tonalIcon(
+                    _micStopButton(
                       onPressed: _pauseListeningForReview,
-                      icon: const Icon(Icons.stop_rounded, size: 18),
-                      label: Text(l10n.voiceStopRecording),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: colorScheme.errorContainer,
-                        foregroundColor: colorScheme.error,
-                      ),
+                      live: true,
+                      tooltip: l10n.voiceStopRecording,
+                      colorScheme: colorScheme,
                     )
                   else if (_state == VoicePanelState.review)
                     Row(
@@ -1915,14 +1935,11 @@ class _VoiceInputPanelState extends State<VoiceInputPanel>
                       ],
                     )
                   else if (_state != VoicePanelState.idle)
-                    FilledButton.tonalIcon(
+                    _micStopButton(
                       onPressed: _stopEverything,
-                      icon: const Icon(Icons.stop_rounded, size: 18),
-                      label: Text(l10n.voiceStopRecording),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: colorScheme.errorContainer,
-                        foregroundColor: colorScheme.error,
-                      ),
+                      live: false,
+                      tooltip: l10n.voiceStopRecording,
+                      colorScheme: colorScheme,
                     )
                   else
                     const SizedBox(width: 96),

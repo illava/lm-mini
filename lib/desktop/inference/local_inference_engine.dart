@@ -1,3 +1,4 @@
+import '../../services/apple_intelligence_endpoint.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -59,6 +60,17 @@ class LocalInferenceEngine {
     String? memoryContext,
     List<String>? imageUrls,
   }) {
+    // Apple's built-in model (no download); same chat flow as GGUF / MLX.
+    if (settings.activeProviderKind == 'appleIntelligence') {
+      return AppleIntelligenceEndpoint().streamChat(
+        history: history,
+        userMessage: userMessage,
+        systemPrompt: systemPrompt,
+        memoryContext: memoryContext,
+        maxTokens: settings.maxTokens,
+        temperature: settings.temperature,
+      );
+    }
     return Stream.fromFuture(_shouldUseSidecar(settings)).asyncExpand((use) {
       if (!use) {
         return OnDeviceLLMService.instance.streamChat(

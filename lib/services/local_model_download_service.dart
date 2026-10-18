@@ -164,6 +164,8 @@ class LocalModelDownloadService extends ChangeNotifier {
     'qwen/qwen3-4b/Q4_K_M',
     'qwen/qwen3-8b/Q8_0',
     'meta-llama/llama-3.2-3b-instruct/Q8_0',
+    // Oct 2026 refresh; finished downloads keep working (Older models).
+    ...LocalModelCatalog.retiredIds,
   };
 
   /// Load persisted entries from SharedPreferences. Safe to call multiple

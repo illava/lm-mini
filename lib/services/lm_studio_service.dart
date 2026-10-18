@@ -62,6 +62,10 @@ class LMStudioService {
   /// tolerate slow time-to-first-token on reasoning / cloud models.
   static const Duration _streamIdleTimeout = Duration(seconds: 120);
 
+  /// Idle limit while MCP tools are active: a tool (web fetch, code run,
+  /// long search) can keep LM Studio silent far longer than a token gap.
+  static const Duration _toolStreamIdleTimeout = Duration(minutes: 15);
+
   /// HTTP clients dedicated to in-flight streaming requests. Tracked so
   /// `stopGeneration()` can close them, which closes the underlying SSE
   /// socket. LM Studio detects the client disconnect and aborts the
@@ -869,6 +873,7 @@ class LMStudioService {
         reasoning: settings.reasoning,
         modelId: modelId,
         providerType: apiType,
+        baseUrl: baseUrl,
       );
       final requestBody = <String, dynamic>{
         'model': modelId,
@@ -901,12 +906,19 @@ class LMStudioService {
         if (tools != null && tools.isNotEmpty) 'tools': tools,
         // Enable tool use (auto lets the model decide when to call tools)
         if (tools != null && tools.isNotEmpty) 'tool_choice': 'auto',
-        if (openAiResponseFormat(
-          useStructuredOutput: settings.useStructuredOutput,
-          providerType: apiType,
-        )
-            case final format?)
-          'response_format': format,
+        // Structured output and tool calling can't share one request: the
+        // server must merge both into a sampling grammar, and LM Studio
+        // rejects that ("failed to parse grammar"). Tools win.
+        if ((tools == null || tools.isEmpty) &&
+            openAiResponseFormat(
+                  useStructuredOutput: settings.useStructuredOutput,
+                  providerType: apiType,
+                ) !=
+                null)
+          'response_format': openAiResponseFormat(
+            useStructuredOutput: settings.useStructuredOutput,
+            providerType: apiType,
+          ),
       };
 
       debugPrint('LMStudioService: Chat request body:');
@@ -934,7 +946,29 @@ class LMStudioService {
       // by closing the socket. Removed in the finally below.
       final client = await _beginStreamClient();
       try {
-        final streamedResponse = await client.send(request);
+        var streamedResponse = await client.send(request);
+
+        // Some OpenAI-compatible servers reject llama.cpp's thinking fields
+        // (Groq: "property 'chat_template_kwargs' is unsupported"). Retry
+        // once without them instead of failing the message.
+        if (streamedResponse.statusCode == 400 && llamaThinking.isNotEmpty) {
+          final body = await streamedResponse.stream.bytesToString();
+          if (llamaThinking.keys.any(body.contains)) {
+            debugPrint('⚠️ Server rejected thinking fields; retrying without');
+            final retryBody = Map<String, dynamic>.of(requestBody)
+              ..removeWhere((k, _) => llamaThinking.containsKey(k));
+            final retry = http.Request('POST', request.url)
+              ..headers.addAll(request.headers)
+              ..body = jsonEncode(retryBody);
+            streamedResponse = await client.send(retry);
+          } else {
+            streamedResponse = http.StreamedResponse(
+              Stream.value(utf8.encode(body)),
+              400,
+              headers: streamedResponse.headers,
+            );
+          }
+        }
 
         if (streamedResponse.statusCode != 200) {
           final body = await streamedResponse.stream.bytesToString();
@@ -1367,6 +1401,14 @@ class LMStudioService {
       return;
     }
 
+    // Set once LM Studio starts this reply. After that, a failure must show
+    // as an error: silently re-sending on V0 (no MCP tools) gave a quick
+    // tool-less answer that looked finished while LM Studio kept working.
+    var v1ReplyStarted = false;
+    // Long MCP tool calls can keep the stream silent for minutes.
+    final idleTimeout = (integrations != null && integrations.isNotEmpty)
+        ? _toolStreamIdleTimeout
+        : _streamIdleTimeout;
     try {
       final requestBody = {
         'model': modelId,
@@ -1540,7 +1582,7 @@ class LMStudioService {
         String lineBuffer = '';
 
         await for (final chunk in streamedResponse.stream
-            .timeout(_streamIdleTimeout)
+            .timeout(idleTimeout)
             .transform(utf8.decoder)) {
           // Accumulate with previous partial line and split
           final combined = lineBuffer + chunk;
@@ -1621,6 +1663,7 @@ class LMStudioService {
                 switch (eventType) {
                   case 'chat.start':
                     sawChatStart = true;
+                    v1ReplyStarted = true;
                     responseId = jsonData['response_id'] as String?;
                     yield {'type': 'chat.start', 'response_id': responseId};
                     break;
@@ -1905,8 +1948,20 @@ class LMStudioService {
         } catch (_) {}
       }
     } catch (e) {
+      if (v1ReplyStarted) {
+        debugPrint('⚠️ V1 stream failed mid-reply: $e');
+        yield {
+          'error': e is TimeoutException
+              ? 'LM Studio stopped sending the reply for '
+                  '${idleTimeout.inMinutes} minutes, so LM Mini stopped '
+                  'waiting. LM Studio may still finish it on the computer.'
+              : 'The connection to LM Studio dropped mid-reply: $e',
+          'error_type': 'v1_stream_interrupted',
+        };
+        return;
+      }
       debugPrint('⚠️ V1 API exception: $e, falling back to v0 API');
-      // Fallback to v0 API on any error
+      // V1 failed before the reply started: retry on v0.
       yield* streamChatCompletion(
         baseUrl: baseUrl,
         formattedMessages: formattedMessages,

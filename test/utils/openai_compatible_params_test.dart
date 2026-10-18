@@ -263,4 +263,40 @@ void main() {
       );
     });
   });
+
+  group('llamaCppThinkingFields host check', () {
+    Map<String, dynamic> f(String url) => llamaCppThinkingFields(
+          reasoning: 'on',
+          modelId: 'qwen/qwen3-32b',
+          providerType: CloudApiType.openaiCompatible,
+          baseUrl: url,
+        );
+
+    test('hosted OpenAI-compatible APIs (Groq…) never get chat_template_kwargs',
+        () {
+      expect(f('https://api.groq.com/openai'), isEmpty);
+      expect(f('https://ollama.com'), isEmpty);
+    });
+
+    test('local, LAN and VPN servers (llama.cpp / vLLM) still get it', () {
+      for (final url in [
+        'http://localhost:8080',
+        'http://192.168.1.5:8000',
+        'http://100.101.102.103:8080',
+      ]) {
+        expect(f(url), contains('chat_template_kwargs'), reason: url);
+      }
+    });
+
+    test('no base URL keeps the old behaviour', () {
+      expect(
+        llamaCppThinkingFields(
+          reasoning: 'on',
+          modelId: 'qwen/qwen3-32b',
+          providerType: CloudApiType.openaiCompatible,
+        ),
+        contains('chat_template_kwargs'),
+      );
+    });
+  });
 }

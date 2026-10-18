@@ -922,13 +922,14 @@ class SettingsProvider with ChangeNotifier {
       if (uri == null || uri.host.isEmpty) return null;
       final result = await ServerReachability.probe(uri);
       if (result == ProbeResult.ok) return null;
-      if (scope == HostScope.localNetwork &&
-          !net.hasLocalNetwork &&
-          net.hasMobile) {
+      // Only now that the server didn't answer, explain from the phone side.
+      if (net.isOffline) return NetworkPreflightError.offlineMessage;
+      if (scope == HostScope.localNetwork && !net.hasLocalNetwork) {
         return NetworkPreflightError.needsWifiMessage(name, host);
       }
       if (result == ProbeResult.timeout &&
           Platform.isIOS &&
+          net.hasLocalNetwork &&
           scope != HostScope.public &&
           !ServerReachability.hasEverReachedLocalHost) {
         // First LAN connection may be waiting on the Local Network prompt.
@@ -1673,6 +1674,21 @@ class SettingsProvider with ChangeNotifier {
     return activateServerProfile(resolved.id);
   }
 
+  /// Chat with Apple's built-in model (Apple Intelligence, iOS / macOS 26).
+  /// No download: frees any loaded GGUF / MLX model and leaves USB / cloud
+  /// routing. The on-device server stays the active profile.
+  Future<void> activateAppleIntelligence() async {
+    await OnDeviceLLMService.instance.unloadAll();
+    if (_settings.usbModeEnabled) await deactivateUsbMode();
+    await CloudApiService().setActiveProvider(null);
+    await updateSettings(_settings.copyWith(
+      activeProviderKind: 'appleIntelligence',
+      selectedModel: 'Apple Intelligence',
+    ));
+    await ServerProfileService.instance.markActive(ServerProfile.onDeviceId);
+    notifyListeners();
+  }
+
   /// Switch the app to an already-saved profile.
   Future<bool> activateServerProfile(String id) async {
     final profiles = ServerProfileService.instance;
@@ -1800,6 +1816,8 @@ class SettingsProvider with ChangeNotifier {
     final downloads = LocalModelDownloadService.instance;
     await downloads.init();
     if (downloads.readyEntries.isNotEmpty) return;
+    // Apple's built-in model was chosen explicitly; keep it.
+    if (_settings.activeProviderKind == 'appleIntelligence') return;
 
     final profiles = ServerProfileService.instance;
     if (!profiles.isLoaded) {

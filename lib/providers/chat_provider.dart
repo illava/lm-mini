@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:provider/provider.dart';
 import 'package:lm_mini_premium/lm_mini_premium.dart';
+import '../l10n/app_localizations.dart';
 import '../models/group_chat_participant.dart';
 import '../utils/response_parser.dart';
 import '../utils/chat_title.dart';
@@ -39,6 +40,7 @@ import '../models/chat_conversation.dart';
 import '../models/memory_category.dart';
 import '../models/message_stats.dart';
 import '../models/file_attachment.dart';
+import '../services/apple_intelligence_endpoint.dart';
 import '../services/usb_bridge_service.dart';
 import '../services/database_service.dart';
 import '../services/generated_image_library_service.dart';
@@ -67,6 +69,7 @@ import '../models/app_settings.dart';
 import '../models/param_preset.dart';
 import '../models/system_prompt.dart';
 import '../utils/group_chat_pro_gate.dart';
+import '../utils/group_chat_turns.dart';
 import '../utils/group_participant_backend.dart';
 import '../utils/on_device_attachments.dart';
 import '../utils/app_navigator.dart';
@@ -1010,8 +1013,16 @@ class ChatProvider with ChangeNotifier {
 
   /// Dump prior turns into a V1 `input` string (used when the server
   /// session is missing). Applies compact summary + roll / cut-middle.
-  String _injectedHistoryInput(String content, AppSettings settings) {
-    final historyMessages = _priorMessagesForPacking();
+  ///
+  /// [history] overrides the prior turns (group chats pass the turns before
+  /// the latest user message; that message and the replies after it are
+  /// already in [content]).
+  String _injectedHistoryInput(
+    String content,
+    AppSettings settings, {
+    List<ChatMessage>? history,
+  }) {
+    final historyMessages = history ?? _priorMessagesForPacking();
     if (historyMessages.isEmpty &&
         (compactSummary == null || compactSummary!.trim().isEmpty)) {
       return content;
@@ -2712,39 +2723,26 @@ class ChatProvider with ChangeNotifier {
       // V1 skipContextInjection); never as a mid-history system message.
       final memoryContext = await _buildMemoryContextForChat(effectiveSettings);
 
-      // Decide which API to use based on chat type and settings
-      final isGroupChat = _currentConversation!.settings['isGroupChat'] == true;
-      // On-device routing: when the user has selected an on-device provider,
-      // bypass the cloud/LM-Studio paths entirely and stream from the local
-      // engine (fllama or MLX).
-      final providerKind = effectiveSettings.activeProviderKind;
-      if (providerKind == 'onDeviceGguf' || providerKind == 'onDeviceMlx') {
+      // Decide which API to use based on chat type and settings. Group
+      // chats come first: each participant has its own backend, so a global
+      // on-device model (incl. Apple Intelligence) must not answer alone.
+      final route = GroupChatTurns.replyRoute(
+        isGroupChat: _currentConversation!.settings['isGroupChat'] == true,
+        providerKind: effectiveSettings.activeProviderKind,
+      );
+      if (route == ChatReplyRoute.group) {
+        // Group chat: route to all participants sequentially or in parallel
+        await _proSendGroupMessage(messageContent, effectiveSettings, imageUrls,
+            userDisplayContent: displayContent, memoryContext: memoryContext);
+      } else if (route == ChatReplyRoute.onDevice) {
+        // On-device routing: bypass the cloud/LM-Studio paths entirely and
+        // stream from the local engine (fllama / MLX / Apple Intelligence).
         await _sendMessageOnDevice(
           messageContent,
           effectiveSettings,
           memoryContext: memoryContext,
           imageUrls: imageUrls,
         );
-      } else if (providerKind == 'appleIntelligence') {
-        // Apple Intelligence bridge ships separately; surface a friendly
-        // message until its Swift module is bundled.
-        final assistant = ChatMessage(
-          id: _uid(),
-          content: 'Apple Intelligence support requires iOS 26+ and the '
-              'Foundation Models Swift bridge, which is not bundled in '
-              'this build. Switch to an on-device GGUF model or a cloud '
-              'provider to continue chatting.',
-          role: 'assistant',
-          timestamp: DateTime.now(),
-        );
-        await _databaseService.insertMessage(
-            assistant, _currentConversation!.id);
-        _currentMessages.add(assistant);
-        notifyListeners();
-      } else if (isGroupChat) {
-        // Group chat: route to all participants sequentially or in parallel
-        await _proSendGroupMessage(messageContent, effectiveSettings, imageUrls,
-            userDisplayContent: displayContent, memoryContext: memoryContext);
       } else {
         // Wi‑Fi / mobile data / offline check + quick TCP probe for LAN
         // servers. Throws NetworkPreflightException → catch below; the user
@@ -2983,6 +2981,42 @@ class ChatProvider with ChangeNotifier {
         _conversations.indexWhere((c) => c.id == _currentConversation!.id);
     if (listIdx != -1) _conversations[listIdx] = _currentConversation!;
     return next;
+  }
+
+  /// After turns were deleted (regenerate / edit), point each participant's
+  /// LM Studio session at its newest remaining reply, or start it cold, so
+  /// the server no longer continues from deleted turns. One write.
+  Future<void> _resyncGroupParticipantSessions() async {
+    if (_currentConversation?.settings['isGroupChat'] != true) return;
+    final participants = _getGroupParticipants();
+    if (participants.isEmpty) return;
+    final heads = GroupChatTurns.sessionHeads(
+      _currentMessages,
+      participants.map((p) => p.id),
+    );
+    var changed = false;
+    final next = <GroupChatParticipant>[];
+    for (final p in participants) {
+      final head = heads[p.id];
+      if (p.lastResponseId == head) {
+        next.add(p);
+        continue;
+      }
+      changed = true;
+      next.add(head == null
+          ? p.copyWith(clearLastResponseId: true)
+          : p.copyWith(lastResponseId: head));
+    }
+    if (!changed) return;
+    final updatedSettings =
+        Map<String, dynamic>.from(_currentConversation!.settings);
+    updatedSettings['participants'] = next.map((p) => p.toJson()).toList();
+    _currentConversation = _currentConversation!.copyWith(
+      settings: updatedSettings,
+      updatedAt: DateTime.now(),
+    );
+    await _databaseService.updateConversation(_currentConversation!);
+    _syncConversationInList(_currentConversation!);
   }
 
   /// Find the [CloudApiProvider] a participant should use, or `null` when
@@ -4834,6 +4868,29 @@ class ChatProvider with ChangeNotifier {
                       LmsMcpError.streamingStatus(mcpFailureUserMessage));
                   notifyListeners();
                   continue; // Don't return — let chat.end deliver any generated content
+                }
+
+                // V1 reply stopped mid-way (long silence or dropped link):
+                // keep what already streamed and say why.
+                if (errorType == 'v1_stream_interrupted') {
+                  _currentMessages.removeWhere((m) => m.id == tempMessageId);
+                  if (accumulatedContent.trim().isNotEmpty) {
+                    final partial = ChatMessage(
+                      id: _uid(),
+                      content: accumulatedContent,
+                      role: 'assistant',
+                      timestamp: DateTime.now(),
+                    );
+                    await _databaseService.insertMessage(
+                        partial, originConversationId);
+                    if (_currentConversation?.id == originConversationId) {
+                      _currentMessages.add(partial);
+                    }
+                  }
+                  _stopGenerationUi();
+                  _error = errorMsg;
+                  notifyListeners();
+                  return;
                 }
 
                 if (_isModelNotFoundChunk(errorType, errorMsg, chunk) &&
@@ -7538,6 +7595,7 @@ class ChatProvider with ChangeNotifier {
 
     // Tell the on-device engine to stop too (no-op if nothing is running).
     OnDeviceLLMService.instance.cancelActive();
+    AppleIntelligenceEndpoint.cancelActive();
 
     // Force-close any in-flight LM Studio / Ollama streams. Closing the HTTP
     // connection is the documented way to interrupt generation on both.
@@ -7627,6 +7685,7 @@ class ChatProvider with ChangeNotifier {
       )) {
         if (_shouldCancelGeneration) {
           OnDeviceLLMService.instance.cancelActive();
+          AppleIntelligenceEndpoint.cancelActive();
           break;
         }
         if (_currentConversation?.id != originConversationId) break;
@@ -7692,9 +7751,13 @@ class ChatProvider with ChangeNotifier {
       }
     } catch (e) {
       await _stopPartialSaveTimer();
+      // Apple Intelligence errors are already user-facing sentences.
+      final isApple = settings.activeProviderKind == 'appleIntelligence';
       final errorMessage = ChatMessage(
         id: _uid(),
-        content: 'On-device inference failed: $e',
+        content: isApple && e is StateError
+            ? e.message
+            : 'On-device inference failed: $e',
         role: 'assistant',
         timestamp: DateTime.now(),
       );
@@ -7784,6 +7847,13 @@ class ChatProvider with ChangeNotifier {
   }) async {
     if (_currentConversation == null || _currentMessages.isEmpty) return;
     if (_isSendingMessage) return;
+    // Group replies need Pro: check before the old reply is deleted.
+    if (GroupChatProGate.isLocked(this)) {
+      if (uiContext != null && uiContext.mounted) {
+        await GroupChatProGate.showUpgradeDialog(uiContext);
+      }
+      return;
+    }
 
     _activeSettingsProvider = settingsProvider;
     _activeUiContext = uiContext;
@@ -7866,6 +7936,7 @@ class ChatProvider with ChangeNotifier {
       updatedAt: DateTime.now(),
     );
     await _databaseService.updateConversation(_currentConversation!);
+    await _resyncGroupParticipantSessions();
     await _includeUndeliveredTurnsInContext(userMessage.id);
 
     notifyListeners();
@@ -7893,15 +7964,31 @@ class ChatProvider with ChangeNotifier {
     await _beginGenerationSession(effectiveSettings);
 
     try {
-      final readySettings = await _ensureChatBackendReady(effectiveSettings);
+      final isGroup = _currentConversation!.settings['isGroupChat'] == true;
+      // Group participants bring their own backends: don't load / set up
+      // the global model for them.
+      final readySettings = isGroup
+          ? effectiveSettings
+          : await _ensureChatBackendReady(effectiveSettings);
       if (readySettings != null) {
         effectiveSettings = readySettings;
 
-        final providerKind = effectiveSettings.activeProviderKind;
+        final route = GroupChatTurns.replyRoute(
+          isGroupChat: isGroup,
+          providerKind: effectiveSettings.activeProviderKind,
+        );
         final memoryContext =
             await _buildMemoryContextForChat(effectiveSettings);
 
-        if (providerKind == 'onDeviceGguf' || providerKind == 'onDeviceMlx') {
+        if (route == ChatReplyRoute.group) {
+          await _proSendGroupMessage(
+            userMessage.content,
+            effectiveSettings,
+            userMessage.imageUrls,
+            userDisplayContent: userMessage.content,
+            memoryContext: memoryContext,
+          );
+        } else if (route == ChatReplyRoute.onDevice) {
           final regenContent = OnDeviceAttachments.withFileText(
             userMessage.content,
             files: userMessage.fileAttachments,
@@ -8055,6 +8142,7 @@ class ChatProvider with ChangeNotifier {
         updatedAt: DateTime.now(),
       );
       await _databaseService.updateConversation(_currentConversation!);
+      await _resyncGroupParticipantSessions();
       _pendingAlternatives = null;
       await _includeUndeliveredTurnsInContext(userMessage.id);
       notifyListeners();
@@ -8072,14 +8160,27 @@ class ChatProvider with ChangeNotifier {
         await _preflightServer(effectiveSettings);
         if (_shouldCancelGeneration) return;
       }
-      final readySettings = await _ensureChatBackendReady(effectiveSettings);
+      final readySettings = isGroupChat
+          ? effectiveSettings
+          : await _ensureChatBackendReady(effectiveSettings);
       if (readySettings == null) return;
       effectiveSettings = readySettings;
 
-      final providerKind = effectiveSettings.activeProviderKind;
+      final route = GroupChatTurns.replyRoute(
+        isGroupChat: isGroupChat,
+        providerKind: effectiveSettings.activeProviderKind,
+      );
       final memoryContext = await _buildMemoryContextForChat(effectiveSettings);
 
-      if (providerKind == 'onDeviceGguf' || providerKind == 'onDeviceMlx') {
+      if (route == ChatReplyRoute.group) {
+        await _proSendGroupMessage(
+          userMessage.content,
+          effectiveSettings,
+          userMessage.imageUrls,
+          userDisplayContent: userMessage.content,
+          memoryContext: memoryContext,
+        );
+      } else if (route == ChatReplyRoute.onDevice) {
         final regenContent = OnDeviceAttachments.withFileText(
           userMessage.content,
           files: userMessage.fileAttachments,
@@ -8092,14 +8193,6 @@ class ChatProvider with ChangeNotifier {
           effectiveSettings,
           memoryContext: memoryContext,
           imageUrls: userMessage.imageUrls,
-        );
-      } else if (isGroupChat) {
-        await _proSendGroupMessage(
-          userMessage.content,
-          effectiveSettings,
-          userMessage.imageUrls,
-          userDisplayContent: userMessage.content,
-          memoryContext: memoryContext,
         );
       } else {
         await _routeNetworkAssistantReply(
@@ -8175,13 +8268,25 @@ class ChatProvider with ChangeNotifier {
     if (_currentConversation == null) return;
     if (_isSendingMessage) return;
 
-    _activeSettingsProvider = settingsProvider;
-    _activeUiContext = uiContext;
-
     final idx = _currentMessages.indexWhere((m) => m.id == messageId);
     if (idx < 0) return;
 
     final message = _currentMessages[idx];
+    // Group replies need Pro: check before the edit is saved or any later
+    // turn is deleted (the open-source build would delete and then reply
+    // with nothing).
+    if (andRegenerate &&
+        message.role == 'user' &&
+        GroupChatProGate.isLocked(this)) {
+      if (uiContext != null && uiContext.mounted) {
+        await GroupChatProGate.showUpgradeDialog(uiContext);
+      }
+      return;
+    }
+
+    _activeSettingsProvider = settingsProvider;
+    _activeUiContext = uiContext;
+
     final updated = message.copyWith(content: newContent);
 
     // Persist
@@ -8229,6 +8334,7 @@ class ChatProvider with ChangeNotifier {
         updatedAt: DateTime.now(),
       );
       await _databaseService.updateConversation(_currentConversation!);
+      await _resyncGroupParticipantSessions();
       await _includeUndeliveredTurnsInContext(messageId);
       notifyListeners();
 
@@ -8253,15 +8359,29 @@ class ChatProvider with ChangeNotifier {
       await _beginGenerationSession(effectiveSettings);
 
       try {
-        final readySettings = await _ensureChatBackendReady(effectiveSettings);
+        final isGroup = _currentConversation!.settings['isGroupChat'] == true;
+        final readySettings = isGroup
+            ? effectiveSettings
+            : await _ensureChatBackendReady(effectiveSettings);
         if (readySettings != null) {
           effectiveSettings = readySettings;
 
-          final providerKind = effectiveSettings.activeProviderKind;
+          final route = GroupChatTurns.replyRoute(
+            isGroupChat: isGroup,
+            providerKind: effectiveSettings.activeProviderKind,
+          );
           final memoryContext =
               await _buildMemoryContextForChat(effectiveSettings);
 
-          if (providerKind == 'onDeviceGguf' || providerKind == 'onDeviceMlx') {
+          if (route == ChatReplyRoute.group) {
+            await _proSendGroupMessage(
+              newContent,
+              effectiveSettings,
+              updated.imageUrls,
+              userDisplayContent: newContent,
+              memoryContext: memoryContext,
+            );
+          } else if (route == ChatReplyRoute.onDevice) {
             final editContent = OnDeviceAttachments.withFileText(
               newContent,
               files: updated.fileAttachments,

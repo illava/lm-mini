@@ -1,6 +1,7 @@
 import 'package:lm_mini_premium/lm_mini_premium.dart';
 
 import '../models/arena_models.dart';
+import 'server_reachability.dart';
 
 /// Helpers for shaping OpenAI Chat Completions bodies for current models
 /// (GPT-5 / o-series reject deprecated `max_tokens` and often reject
@@ -138,17 +139,26 @@ Map<String, dynamic>? zAiThinkingFields({
 ///
 /// Used on `/v1/chat/completions` for llama-server and other local OpenAI
 /// backends. Not sent to hosted OpenAI / OpenRouter / DeepSeek (those use
-/// `reasoning_effort` or provider-specific fields).
+/// `reasoning_effort` or provider-specific fields), nor to an
+/// OpenAI-compatible provider at a public address ([baseUrl]): hosted
+/// OpenAI-compatible APIs such as Groq reject `chat_template_kwargs` with
+/// HTTP 400.
 Map<String, dynamic> llamaCppThinkingFields({
   required String reasoning,
   required String modelId,
   CloudApiType? providerType,
+  String? baseUrl,
 }) {
   final enabled = reasoning != 'off' && reasoning != 'false';
   if (providerType == CloudApiType.unsloth) {
     return {'enable_thinking': enabled};
   }
   if (providerType != null && providerType != CloudApiType.openaiCompatible) {
+    return const {};
+  }
+  if (providerType == CloudApiType.openaiCompatible &&
+      baseUrl != null &&
+      classifyHost(baseUrl) == HostScope.public) {
     return const {};
   }
   if (!ArenaContestant.looksLikeReasoningModel(modelId)) {

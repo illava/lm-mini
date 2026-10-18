@@ -13,9 +13,9 @@ import 'server_unreachable_error.dart';
 ///
 /// | # | kind                     | when                                                        |
 /// |---|--------------------------|-------------------------------------------------------------|
-/// | 1 | offline                  | live snapshot offline, server-backed chat (not loopback)    |
-/// | 2 | needsWifi                | LAN host, no Wi‑Fi/Ethernet, no VPN, Remote Access off      |
-/// |   |                          | (live), or a stored needsWifi error while still off Wi‑Fi   |
+/// | 1 | offline                  | a connection failed while the phone is offline              |
+/// | 2 | needsWifi                | a connection to a LAN host failed with no Wi‑Fi / reported  |
+/// |   |                          | VPN, or a stored needsWifi error while still off Wi‑Fi      |
 /// | 3 | lostWifi                 | Wi‑Fi dropped mid-reply (stored chat error)                 |
 /// | 4 | serverUnreachable        | refused / host down (LanServerError), Connect 502/503       |
 /// | 5 | localNetworkPermission   | iOS + on Wi‑Fi + LAN host + timeout / no-route signature    |
@@ -27,10 +27,10 @@ import 'server_unreachable_error.dart';
 /// connectionError. A non-transport chat error (row 7) means the last send
 /// got past the network, so a connectionError beside it is ignored.
 ///
-/// Rows 1–2 come from the live [NetworkSnapshot] and win over any stored
-/// chat / model-list error: those are just symptoms of being offline or on
-/// mobile data. A stored offline / needsWifi error whose condition no
-/// longer holds (Wi‑Fi is back) is stale and dropped.
+/// Rows 1–2 need a failed connection (chat or model-list error); the live
+/// [NetworkSnapshot] then explains it. Mobile data alone shows nothing —
+/// the server may well be reachable (VPN). A stored offline / needsWifi
+/// error whose condition no longer holds (Wi‑Fi is back) is dropped.
 enum ConnectionIssueKind {
   offline,
   needsWifi,
@@ -161,33 +161,43 @@ ConnectionIssue? resolveConnectionIssue({
   final hostIsLan = scope == HostScope.localNetwork;
   final offWifi = !net.isOffline && !net.hasLocalNetwork;
 
+  bool transport(String s) =>
+      ServerUnreachableError.matches(s) || NetworkPreflightError.matches(s);
+  // Rows 1–2 only explain a connection that actually failed. Being on
+  // mobile data (or a VPN the phone doesn't report) is not a problem until
+  // the server can't be reached.
+  final chatFailed = hasChat && (chatNet != null || transport(chatBlob));
+  final connFailed = hasConn && (connNet != null || transport(connBlob));
+  final failed = chatFailed || connFailed;
+
   // ── 1. Offline ────────────────────────────────────────────────────────
-  if (serverBacked && scope != HostScope.loopback && net.isOffline) {
+  if (serverBacked && scope != HostScope.loopback && net.isOffline && failed) {
     return ConnectionIssue(
       ConnectionIssueKind.offline,
-      // "chat" when the last send failed for this reason (the pill then
-      // explains it); otherwise just the live state.
-      source: chatNet != null
+      source: chatFailed
           ? ConnectionIssueSource.chat
-          : ConnectionIssueSource.network,
+          : ConnectionIssueSource.connection,
       provider: name(),
       host: host,
     );
   }
 
   // ── 2. Mobile data with a LAN server ─────────────────────────────────
-  final liveNeedsWifi = lanCheck &&
+  // After a failed attempt (including a VPN that doesn't route the LAN),
+  // while the phone still has no Wi‑Fi.
+  // (A VPN the phone does report routes elsewhere: the server itself is the
+  // likelier problem, see row 4/6.)
+  final failedOffWifi = lanCheck &&
       serverBacked &&
       hostIsLan &&
       offWifi &&
-      !net.hasVpn;
-  // A stored needsWifi (e.g. VPN reported but not routing the LAN) still
-  // holds while the phone has no Wi‑Fi.
+      !net.hasVpn &&
+      failed;
   final storedNeedsWifi = offWifi &&
       (hostIsLan || !lanCheck) &&
       (chatNet?.kind == NetworkIssueKind.needsWifi ||
           connNet?.kind == NetworkIssueKind.needsWifi);
-  if (liveNeedsWifi || storedNeedsWifi) {
+  if (failedOffWifi || storedNeedsWifi) {
     final storedHost = [chatNet, connNet]
         .whereType<NetworkIssue>()
         .map((i) => i.host)
@@ -199,8 +209,8 @@ ConnectionIssue? resolveConnectionIssue({
       source: (chatNet?.kind == NetworkIssueKind.needsWifi ||
               chatNet?.kind == NetworkIssueKind.lostWifi)
           ? ConnectionIssueSource.chat
-          : (liveNeedsWifi
-              ? ConnectionIssueSource.network
+          : (chatFailed
+              ? ConnectionIssueSource.chat
               : ConnectionIssueSource.connection),
       provider: name(),
       host: host.isNotEmpty ? host : storedHost,
@@ -257,9 +267,6 @@ ConnectionIssue? resolveConnectionIssue({
       !net.isOffline &&
       !localAccessProven &&
       LocalNetworkService.matchesPermissionSignature(s);
-  bool transport(String s) =>
-      ServerUnreachableError.matches(s) || NetworkPreflightError.matches(s);
-
   // A chat error that is not a transport failure (model missing, token
   // limit…) came from the latest send, which got past the network. A
   // model-list connectionError next to it is stale — ignore it.

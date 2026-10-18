@@ -105,7 +105,7 @@ class _GetStartedSetupDialogState extends State<_GetStartedSetupDialog> {
       Navigator.pop(context);
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+        MaterialPageRoute(builder: (_) => const SubscriptionScreen(highlight: PaywallFeature.onDeviceModels)),
       );
       return;
     }

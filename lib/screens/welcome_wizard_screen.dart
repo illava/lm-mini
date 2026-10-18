@@ -14,15 +14,19 @@ import '../services/device_capability_service.dart';
 import '../services/download_progress_activity.dart';
 import '../services/lm_studio_discovery_service.dart';
 import '../services/local_model_catalog.dart';
+import '../services/apple_intelligence_endpoint.dart';
+import '../services/deep_link_service.dart';
 import '../services/local_model_download_service.dart';
 import '../utils/chat_font_helper.dart';
 import '../utils/client_platform.dart';
+import '../widgets/apple_intelligence_card.dart';
 import '../widgets/glass_page_header.dart';
 import '../widgets/onboarding_provider_connect_sheet.dart';
 import 'subscription_screen.dart';
 import '../widgets/glass_blur.dart';
 
-/// First-run (and admin re-test) onboarding: Experience → Setup → Look → Name.
+/// First-run (and admin re-test) onboarding: Setup → Look.
+/// The user's name is asked in the first chat instead (see FirstChatNameCard).
 class WelcomeWizardScreen extends StatefulWidget {
   const WelcomeWizardScreen({super.key});
 
@@ -31,14 +35,11 @@ class WelcomeWizardScreen extends StatefulWidget {
 }
 
 class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
-  static const _totalPages = 4;
+  static const _totalPages = 2;
   final PageController _pageController = PageController();
-  final TextEditingController _nameController = TextEditingController();
   final _downloads = LocalModelDownloadService.instance;
 
   int _currentPage = 0;
-  String? _experience; // beginner | power
-  DeviceCapability? _cap;
   OnboardingModelPicks? _picks;
 
   /// Set when the user taps an on-device model. Nothing is pre-selected.
@@ -55,14 +56,12 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
   @override
   void initState() {
     super.initState();
-    final settings = context.read<SettingsProvider>().settings;
-    _experience = settings.aiExperienceLevel;
-    _nameController.text = settings.preferredUserName ?? '';
     _downloads.addListener(_onDownloadTick);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Wizard always starts from the system theme; user can change on Look.
       context.read<SettingsProvider>().updateThemeMode(ThemeMode.system);
       unawaited(_bootstrapDevice());
+      unawaited(_enterSetupPage());
     });
   }
 
@@ -70,13 +69,22 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
   void dispose() {
     _downloads.removeListener(_onDownloadTick);
     _pageController.dispose();
-    _nameController.dispose();
     super.dispose();
   }
 
   void _onDownloadTick() {
     if (mounted) setState(() {});
   }
+
+  /// Apple's built-in model is offered first when it can be used right now.
+  bool _appleReady = false;
+
+  /// Setup page: the two choice cards start collapsed to keep it simple.
+  bool _modelsExpanded = false;
+  bool _serversExpanded = false;
+
+  /// Chat look picked on the Name page (true = full-width replies).
+  bool? _fullWidthChoice;
 
   Future<void> _bootstrapDevice() async {
     await _downloads.init();
@@ -86,9 +94,11 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
     final picks =
         LocalModelCatalog.onboardingPicks(cap, freeTierOnly: freeOnly);
     setState(() {
-      _cap = cap;
       _picks = picks;
     });
+    final apple = await AppleIntelligenceCard.status(refresh: true);
+    if (!mounted) return;
+    setState(() => _appleReady = apple == AppleIntelligenceStatus.available);
   }
 
   Future<void> _startNetworkScan() async {
@@ -126,20 +136,10 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
       _finish();
       return;
     }
-    final next = _currentPage + 1;
-    if (next == 1) {
-      unawaited(_enterSetupPage());
-      return;
-    }
-    unawaited(_goTo(next));
+    unawaited(_goTo(_currentPage + 1));
   }
 
   Future<void> _enterSetupPage() async {
-    if (_cap == null) unawaited(_bootstrapDevice());
-    if (!mounted) return;
-    await _goTo(1);
-    if (!mounted) return;
-
     if ((ClientPlatform.isIos || ClientPlatform.isAndroid) &&
         !_localNetworkPrompted) {
       _localNetworkPrompted = true;
@@ -175,33 +175,43 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
 
   void _finish() {
     final settings = context.read<SettingsProvider>();
-    final name = _nameController.text.trim();
-    if (name.isNotEmpty) {
-      settings.updatePreferredUserName(name);
-      // Seed Memories so models know the name across chats (not only preferredUserName).
-      unawaited(
-        MemoryService().upsertItem(
-          'Name is $name',
-          category: 'personal',
-        ),
-      );
+    // No "beginner or power user?" question any more: start everyone on the
+    // simpler Settings (Settings → Advanced turns the rest on).
+    if (settings.settings.aiExperienceLevel == null) {
+      settings.updateAiExperienceLevel('beginner');
     }
     unawaited(_completeWizard(settings));
   }
 
   Future<void> _completeWizard(SettingsProvider settings) async {
-    await settings.preferReadyDesktopServer();
+    final openChat = await _settleOnAppleIntelligence(settings);
+    if (!openChat) await settings.preferReadyDesktopServer();
     if (!mounted) return;
     settings.completeOnboarding();
     Navigator.of(context).pop();
+    // Apple's model needs no download, so go straight to a chat.
+    if (openChat) DeepLinkService().dispatch(DeepLinkAction.newChat);
   }
 
-  void _selectExperience(String level) {
-    setState(() {
-      _experience = level;
-    });
-    context.read<SettingsProvider>().updateAiExperienceLevel(level);
-    unawaited(_enterSetupPage());
+  /// True when chat should open on Apple Intelligence: the user picked it,
+  /// or it's available and nothing else was set up (no model downloaded or
+  /// downloading, no computer or cloud provider connected) — then pick it.
+  Future<bool> _settleOnAppleIntelligence(SettingsProvider settings) async {
+    final kind = settings.settings.activeProviderKind;
+    if (kind == 'appleIntelligence') return true;
+    if (!_appleReady) return false;
+    final hasModel = _downloads.readyEntries.isNotEmpty ||
+        _downloads.entries.any((e) => e.status == LocalModelStatus.downloading);
+    final isOnDevice = kind == 'onDeviceGguf' || kind == 'onDeviceMlx';
+    final hasRemote = !isOnDevice && settings.isProviderConfigured();
+    if (_chosenOnDeviceId != null ||
+        hasModel ||
+        _linkedProviders.isNotEmpty ||
+        hasRemote) {
+      return false;
+    }
+    await settings.activateAppleIntelligence();
+    return true;
   }
 
   Future<void> _downloadPick(LocalModelSpec spec) async {
@@ -218,7 +228,7 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
       if (!mounted) return;
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+        MaterialPageRoute(builder: (_) => const SubscriptionScreen(highlight: PaywallFeature.onDeviceModels)),
       );
       return;
     }
@@ -306,7 +316,10 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
   }
 
   void _onPickOnDevice(({String label, LocalModelSpec spec}) item) {
-    setState(() => _chosenOnDeviceId = item.spec.id);
+    setState(() {
+      _chosenOnDeviceId = item.spec.id;
+      _modelsExpanded = true;
+    });
     unawaited(_downloadPick(item.spec));
   }
 
@@ -387,10 +400,8 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
   }
 
   String _pageTitle(AppLocalizations l10n) => switch (_currentPage) {
-        0 => l10n.welcomeWizardTitleGetStarted,
-        1 => l10n.welcomeWizardTitleYourSetup,
-        2 => l10n.welcomeWizardTitleLookAndFeel,
-        3 => l10n.welcomeWizardTitleAlmostDone,
+        0 => l10n.welcomeWizardTitleYourSetup,
+        1 => l10n.welcomeWizardTitleLookAndFeel,
         _ => l10n.welcomeWizardTitleSetup,
       };
 
@@ -407,6 +418,8 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
 
   Color get _fg =>
       _sheetLight ? Colors.black.withValues(alpha: 0.88) : Colors.white;
+
+  static const _okGreen = Color(0xFF00B894);
 
   Color get _fgMuted => _fg.withValues(alpha: _sheetLight ? 0.55 : 0.65);
 
@@ -426,14 +439,14 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
           // Always on the dark navy top zone (home-style).
           onLightCanvas: false,
           actions: [
-            if (_currentPage > 0)
-              TextButton(
-                onPressed: _currentPage == _totalPages - 1 ? _finish : _next,
-                child: Text(
-                  l10n.welcomeWizardSkip,
-                  style: const TextStyle(color: Colors.white70),
-                ),
+            if (_currentPage == 0) _languageButton(context),
+            TextButton(
+              onPressed: _currentPage == _totalPages - 1 ? _finish : _next,
+              child: Text(
+                l10n.welcomeWizardSkip,
+                style: const TextStyle(color: Colors.white70),
               ),
+            ),
           ],
         ),
       ),
@@ -463,10 +476,8 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   onPageChanged: (p) => setState(() => _currentPage = p),
                   children: [
-                    _buildExperiencePage(context),
                     _buildSetupPage(context),
                     _buildLookPage(context),
-                    _buildNamePage(context),
                   ],
                 ),
               ),
@@ -477,97 +488,28 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
     );
   }
 
-  // ── Page 1: Experience ───────────────────────────────────────────
-
-  Widget _buildExperiencePage(BuildContext context) {
-    final isBeginner = _experience == 'beginner';
-    final isPower = _experience == 'power';
-    final l10n = AppLocalizations.of(context);
+  /// Header language switch (first page only), e.g. "English ▾".
+  Widget _languageButton(BuildContext context) {
     context.watch<SettingsProvider>();
     final languageName =
         _wizardLanguageName(_effectiveWizardLanguageCode(context));
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
-            children: [
-              Text(
-                l10n.welcomeWizardExperienceTitle,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: _fg,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                l10n.welcomeWizardExperienceSubtitle,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: _fgMuted,
-                    ),
-              ),
-              const SizedBox(height: 28),
-              _ExperienceCard(
-                icon: Icons.spa_outlined,
-                title: l10n.welcomeWizardBeginnerTitle,
-                subtitle: l10n.welcomeWizardBeginnerSubtitle,
-                selected: isBeginner,
-                fg: _fg,
-                lightCanvas: _sheetLight,
-                onTap: () => _selectExperience('beginner'),
-              ),
-              const SizedBox(height: 14),
-              _ExperienceCard(
-                icon: Icons.bolt_outlined,
-                title: l10n.welcomeWizardPowerTitle,
-                subtitle: l10n.welcomeWizardPowerSubtitle,
-                selected: isPower,
-                fg: _fg,
-                lightCanvas: _sheetLight,
-                onTap: () => _selectExperience('power'),
-              ),
-            ],
+    return TextButton(
+      onPressed: () => _showLanguageSheet(context),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            languageName,
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
-        ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-            child: Center(
-              child: GestureDetector(
-                onTap: () => _showLanguageSheet(context),
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        languageName,
-                        style: TextStyle(
-                          color: _fg.withValues(alpha: 0.38),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.expand_more_rounded,
-                        size: 16,
-                        color: _fg.withValues(alpha: 0.32),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+          const SizedBox(width: 2),
+          const Icon(
+            Icons.expand_more_rounded,
+            size: 16,
+            color: Colors.white60,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -596,24 +538,12 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
     );
   }
 
-  // ── Page 2: Setup ────────────────────────────────────────────────
+  // ── Page 1: Setup ────────────────────────────────────────────────
 
   Widget _buildSetupPage(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final cap = _cap;
     final picks = _picks;
-    final accentHint = _experience == 'power'
-        ? l10n.welcomeWizardSetupSubtitlePower
-        : l10n.welcomeWizardSetupSubtitleBeginner;
-
-    String deviceLine = '…';
-    if (cap != null) {
-      final accel = <String>[];
-      if (cap.supportsMlx) accel.add('Apple MLX');
-      if (cap.supportsVulkan) accel.add('Vulkan');
-      final accelText = accel.isEmpty ? 'CPU' : accel.join(' · ');
-      deviceLine = '${cap.ramDisplayLabel} · $accelText';
-    }
+    final accentHint = l10n.welcomeWizardSetupSubtitleBeginner;
 
     final lmServers = _discovered
         .where((s) => s.kind == DiscoveredServerKind.lmStudio)
@@ -652,15 +582,44 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
       return null;
     }
 
+    // One short line under each choice: what's already happening there.
+    ({String text, Color color})? downloadStatus;
+    if (picks != null) {
+      for (final item in picks.labeled) {
+        final entry = _downloads.entryById(item.spec.id);
+        final name = item.spec.displayName;
+        if (entry?.status == LocalModelStatus.ready) {
+          downloadStatus = (
+            text: l10n.onboardingModelReady(name),
+            color: _okGreen,
+          );
+          break;
+        }
+        if (entry?.status == LocalModelStatus.downloading) {
+          downloadStatus = (
+            text: l10n.onboardingModelDownloading(
+              name,
+              (entry!.progress * 100).round(),
+            ),
+            color: _fg,
+          );
+        }
+      }
+    }
+    String? serverStatus;
+    if (_linkedProviders.isNotEmpty) {
+      serverStatus = l10n.welcomeWizardConnected;
+    } else if (_discovered.isNotEmpty) {
+      serverStatus = l10n.onboardingServersFound(_discovered.length);
+    }
+
     return Stack(
       children: [
         ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 108),
           children: [
             Text(
-              _experience == 'power'
-                  ? l10n.welcomeWizardSetupTitlePower
-                  : l10n.welcomeWizardSetupTitleBeginner,
+              l10n.welcomeWizardSetupTitleBeginner,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: _fg,
                     fontWeight: FontWeight.w700,
@@ -673,151 +632,130 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
                     color: _fgMuted,
                   ),
             ),
-            const SizedBox(height: 14),
-            _FrostChip(
-              icon: Icons.phone_iphone_rounded,
-              label: deviceLine,
-            ),
             const SizedBox(height: 20),
-            Text(
-              l10n.welcomeWizardOnDeviceSection,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: _fg,
-                    fontWeight: FontWeight.w600,
-                  ),
+            if (_appleReady) ...[
+              const AppleIntelligenceCard(),
+              const SizedBox(height: 12),
+            ],
+            _SetupChoiceCard(
+              icon: Icons.download_rounded,
+              title: l10n.onboardingDownloadModelTitle,
+              subtitle: l10n.onboardingDownloadModelSubtitle,
+              status: downloadStatus?.text,
+              statusColor: downloadStatus?.color,
+              expanded: _modelsExpanded,
+              onTap: () => setState(() => _modelsExpanded = !_modelsExpanded),
+              child: picks == null
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: CircularProgressIndicator(color: _fgMuted),
+                      ),
+                    )
+                  : _buildOnDevicePicks(context, picks, l10n),
             ),
-            const SizedBox(height: 10),
-            if (picks == null)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: CircularProgressIndicator(color: _fgMuted),
-                ),
-              )
-            else
-              _buildOnDevicePicks(context, picks, l10n),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Text(
-                  l10n.welcomeWizardComputerSection,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: _fg,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const Spacer(),
-                if (_scanning)
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.5,
-                          color: _fgMuted,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.welcomeWizardScanningWifi,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _fgMuted,
-                        ),
-                      ),
-                    ],
-                  )
-                else if (_discovered.isNotEmpty)
-                  Text(
-                    l10n.welcomeWizardFoundCount(_discovered.length),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _fgMuted,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _ProviderCard(
-              title: 'LM Studio',
-              subtitle: lanSubtitle(
-                linked: lmLinked,
-                matches: lmServers,
-                idle: l10n.welcomeWizardLmStudioSubtitle,
-              ),
+            const SizedBox(height: 12),
+            _SetupChoiceCard(
               icon: Icons.desktop_windows_outlined,
-              badge: lanBadge(linked: lmLinked, matches: lmServers),
-              modelCount: lmLinked
-                  ? _modelCounts[OnboardingProviderKind.lmStudio]
-                  : null,
-              scanning: _scanning,
-              connected: lmLinked,
-              onTap: () => _openProvider(OnboardingProviderKind.lmStudio),
-            ),
-            const SizedBox(height: 10),
-            _ProviderCard(
-              title: 'Ollama',
-              subtitle: lanSubtitle(
-                linked: ollamaLinked,
-                matches: ollamaServers,
-                idle: l10n.welcomeWizardOllamaSubtitle,
+              title: l10n.onboardingConnectComputerTitle,
+              subtitle: l10n.onboardingConnectComputerSubtitle,
+              status: serverStatus,
+              statusColor: _okGreen,
+              busy: _scanning && serverStatus == null,
+              expanded: _serversExpanded,
+              onTap: () => setState(() => _serversExpanded = !_serversExpanded),
+              child: Column(
+                children: [
+                  _ProviderCard(
+                    title: 'LM Studio',
+                    subtitle: lanSubtitle(
+                      linked: lmLinked,
+                      matches: lmServers,
+                      idle: l10n.welcomeWizardLmStudioSubtitle,
+                    ),
+                    icon: Icons.desktop_windows_outlined,
+                    badge: lanBadge(linked: lmLinked, matches: lmServers),
+                    modelCount: lmLinked
+                        ? _modelCounts[OnboardingProviderKind.lmStudio]
+                        : null,
+                    scanning: _scanning,
+                    connected: lmLinked,
+                    onTap: () => _openProvider(OnboardingProviderKind.lmStudio),
+                  ),
+                  const SizedBox(height: 10),
+                  _ProviderCard(
+                    title: 'Ollama',
+                    subtitle: lanSubtitle(
+                      linked: ollamaLinked,
+                      matches: ollamaServers,
+                      idle: l10n.welcomeWizardOllamaSubtitle,
+                    ),
+                    icon: Icons.terminal_rounded,
+                    badge:
+                        lanBadge(linked: ollamaLinked, matches: ollamaServers),
+                    modelCount: ollamaLinked
+                        ? _modelCounts[OnboardingProviderKind.ollama]
+                        : null,
+                    scanning: _scanning,
+                    connected: ollamaLinked,
+                    onTap: () => _openProvider(OnboardingProviderKind.ollama),
+                  ),
+                  const SizedBox(height: 10),
+                  _ProviderCard(
+                    title: 'oMLX',
+                    subtitle:
+                        _linkedProviders.contains(OnboardingProviderKind.omlx)
+                            ? l10n.welcomeWizardConnected
+                            : l10n.welcomeWizardOmlxSubtitle,
+                    icon: Icons.memory_outlined,
+                    badge: null,
+                    modelCount:
+                        _linkedProviders.contains(OnboardingProviderKind.omlx)
+                            ? _modelCounts[OnboardingProviderKind.omlx]
+                            : null,
+                    scanning: false,
+                    connected:
+                        _linkedProviders.contains(OnboardingProviderKind.omlx),
+                    onTap: () => _openProvider(OnboardingProviderKind.omlx),
+                  ),
+                  const SizedBox(height: 10),
+                  _ProviderCard(
+                    title: 'JAN AI',
+                    subtitle:
+                        _linkedProviders.contains(OnboardingProviderKind.jan)
+                            ? l10n.welcomeWizardConnected
+                            : l10n.welcomeWizardJanSubtitle,
+                    icon: Icons.bolt_outlined,
+                    badge: null,
+                    modelCount:
+                        _linkedProviders.contains(OnboardingProviderKind.jan)
+                            ? _modelCounts[OnboardingProviderKind.jan]
+                            : null,
+                    scanning: false,
+                    connected:
+                        _linkedProviders.contains(OnboardingProviderKind.jan),
+                    onTap: () => _openProvider(OnboardingProviderKind.jan),
+                  ),
+                  const SizedBox(height: 10),
+                  _ProviderCard(
+                    title: 'Unsloth',
+                    subtitle: lanSubtitle(
+                      linked: unslothLinked,
+                      matches: unslothServers,
+                      idle: l10n.welcomeWizardUnslothSubtitle,
+                    ),
+                    icon: Icons.science_outlined,
+                    badge: lanBadge(
+                        linked: unslothLinked, matches: unslothServers),
+                    modelCount: unslothLinked
+                        ? _modelCounts[OnboardingProviderKind.unsloth]
+                        : null,
+                    scanning: _scanning,
+                    connected: unslothLinked,
+                    onTap: () => _openProvider(OnboardingProviderKind.unsloth),
+                  ),
+                ],
               ),
-              icon: Icons.terminal_rounded,
-              badge: lanBadge(linked: ollamaLinked, matches: ollamaServers),
-              modelCount: ollamaLinked
-                  ? _modelCounts[OnboardingProviderKind.ollama]
-                  : null,
-              scanning: _scanning,
-              connected: ollamaLinked,
-              onTap: () => _openProvider(OnboardingProviderKind.ollama),
-            ),
-            const SizedBox(height: 10),
-            _ProviderCard(
-              title: 'oMLX',
-              subtitle: _linkedProviders.contains(OnboardingProviderKind.omlx)
-                  ? l10n.welcomeWizardConnected
-                  : l10n.welcomeWizardOmlxSubtitle,
-              icon: Icons.memory_outlined,
-              badge: null,
-              modelCount: _linkedProviders.contains(OnboardingProviderKind.omlx)
-                  ? _modelCounts[OnboardingProviderKind.omlx]
-                  : null,
-              scanning: false,
-              connected: _linkedProviders.contains(OnboardingProviderKind.omlx),
-              onTap: () => _openProvider(OnboardingProviderKind.omlx),
-            ),
-            const SizedBox(height: 10),
-            _ProviderCard(
-              title: 'JAN AI',
-              subtitle: _linkedProviders.contains(OnboardingProviderKind.jan)
-                  ? l10n.welcomeWizardConnected
-                  : l10n.welcomeWizardJanSubtitle,
-              icon: Icons.bolt_outlined,
-              badge: null,
-              modelCount: _linkedProviders.contains(OnboardingProviderKind.jan)
-                  ? _modelCounts[OnboardingProviderKind.jan]
-                  : null,
-              scanning: false,
-              connected: _linkedProviders.contains(OnboardingProviderKind.jan),
-              onTap: () => _openProvider(OnboardingProviderKind.jan),
-            ),
-            const SizedBox(height: 10),
-            _ProviderCard(
-              title: 'Unsloth',
-              subtitle: lanSubtitle(
-                linked: unslothLinked,
-                matches: unslothServers,
-                idle: l10n.welcomeWizardUnslothSubtitle,
-              ),
-              icon: Icons.science_outlined,
-              badge: lanBadge(linked: unslothLinked, matches: unslothServers),
-              modelCount: unslothLinked
-                  ? _modelCounts[OnboardingProviderKind.unsloth]
-                  : null,
-              scanning: _scanning,
-              connected: unslothLinked,
-              onTap: () => _openProvider(OnboardingProviderKind.unsloth),
             ),
           ],
         ),
@@ -907,7 +845,7 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
     );
   }
 
-  // ── Page 3: Look & feel ──────────────────────────────────────────
+  // ── Page 2: Look & feel ──────────────────────────────────────────
 
   Widget _buildLookPage(BuildContext context) {
     final settingsProvider = context.watch<SettingsProvider>();
@@ -916,6 +854,7 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
 
     final follow = _followOnDeviceDownload;
     final bottomPad = follow != null ? 200.0 : 108.0;
+    final fullWidth = _fullWidthChoice ?? settings.fullWidthAssistant;
 
     return Stack(
       children: [
@@ -1050,6 +989,39 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+            Text(
+              l10n.onboardingChatStyleTitle,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: _fg,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _ChatStyleTile(
+                    fullWidth: true,
+                    selected: fullWidth,
+                    title: l10n.onboardingChatStyleFullWidth,
+                    subtitle: l10n.onboardingChatStyleFullWidthHint,
+                    onTap: () => _pickChatStyle(true),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _ChatStyleTile(
+                    fullWidth: false,
+                    selected: !fullWidth,
+                    title: l10n.onboardingChatStyleBubbles,
+                    subtitle: l10n.onboardingChatStyleBubblesHint,
+                    onTap: () => _pickChatStyle(false),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         Positioned(
@@ -1105,7 +1077,7 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
                           shadowColor: Colors.black.withValues(alpha: 0.35),
                           shape: const StadiumBorder(),
                         ),
-                        child: Text(l10n.nextLabel),
+                        child: Text(l10n.welcomeWizardFinish),
                       ),
                     ),
                   ],
@@ -1122,79 +1094,12 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
     );
   }
 
-  // ── Page 4: Name ─────────────────────────────────────────────────
-
-  Widget _buildNamePage(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Stack(
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-              child: ConstrainedBox(
-                constraints:
-                    BoxConstraints(minHeight: constraints.maxHeight - 44),
-                child: Transform.translate(
-                  offset: const Offset(0, -150),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        l10n.welcomeWizardNameTitle,
-                        style:
-                            Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  color: _fg,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        l10n.welcomeWizardNameSubtitle,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: _fgMuted,
-                            ),
-                      ),
-                      const SizedBox(height: 28),
-                      _FrostPanel(
-                        child: TextField(
-                          controller: _nameController,
-                          style: TextStyle(color: _fg, fontSize: 18),
-                          textCapitalization: TextCapitalization.words,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _finish(),
-                          decoration: InputDecoration(
-                            hintText: l10n.welcomeWizardNameHint,
-                            hintStyle: TextStyle(
-                              color: _fg.withValues(alpha: 0.35),
-                            ),
-                            border: InputBorder.none,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      FilledButton(
-                        onPressed: _finish,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(52),
-                          shape: const StadiumBorder(),
-                        ),
-                        child: Text(l10n.welcomeWizardFinish),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            _followOnDeviceDownloadOverlay(
-              l10n: l10n,
-              bottom: 16 + MediaQuery.paddingOf(context).bottom,
-            ),
-          ],
-        );
-      },
-    );
+  void _pickChatStyle(bool fullWidth) {
+    setState(() => _fullWidthChoice = fullWidth);
+    final settings = context.read<SettingsProvider>();
+    settings.updateFullWidthAssistant(fullWidth);
+    // Chose a look here, so skip the later "try full-width" prompt.
+    settings.markFullWidthAssistantNudgeShown();
   }
 }
 
@@ -1286,153 +1191,6 @@ class _FrostPanel extends StatelessWidget {
             border: Border.all(color: tone.border()),
           ),
           child: child,
-        ),
-      ),
-    );
-  }
-}
-
-class _FrostChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _FrostChip({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final tone = _WizardTone.of(context);
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(999),
-        child: GlassBlur(
-          sigmaX: 20,
-          sigmaY: 20,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: tone.fill(0.1, 0.06),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: tone.border(0.14, 0.1)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 16, color: tone.muted),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: tone.fg,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ExperienceCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final Color fg;
-  final bool lightCanvas;
-  final VoidCallback onTap;
-
-  const _ExperienceCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.fg,
-    required this.lightCanvas,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final muted = fg.withValues(alpha: lightCanvas ? 0.55 : 0.65);
-    final scheme = Theme.of(context).colorScheme;
-    // Match assistant chat-bubble corners.
-    const radius = BorderRadius.only(
-      topLeft: Radius.circular(18),
-      topRight: Radius.circular(18),
-      bottomLeft: Radius.circular(4),
-      bottomRight: Radius.circular(18),
-    );
-    final fill = selected
-        ? scheme.secondaryContainer.withValues(alpha: lightCanvas ? 0.75 : 0.55)
-        : (lightCanvas
-            ? scheme.surfaceContainerHighest.withValues(alpha: 0.85)
-            : scheme.surfaceContainerHigh.withValues(alpha: 0.9));
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: radius,
-        child: Ink(
-          decoration: BoxDecoration(
-            color: fill,
-            borderRadius: radius,
-            border: selected
-                ? Border.all(color: scheme.secondary.withValues(alpha: 0.55))
-                : null,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: scheme.secondary.withValues(alpha: 0.18),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: scheme.secondary),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: ChatFontHelper.apply(
-                          null,
-                          TextStyle(
-                            color: fg,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 17,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: ChatFontHelper.apply(
-                          null,
-                          TextStyle(
-                            color: muted,
-                            height: 1.3,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (selected) Icon(Icons.check_circle, color: scheme.secondary),
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -1807,6 +1565,294 @@ class _ProviderCard extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Setup page choice ("Download a model", "Connect your computer"): one tap
+/// target with a short status line; tapping opens its list underneath.
+class _SetupChoiceCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String? status;
+  final Color? statusColor;
+  final bool busy;
+  final bool expanded;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _SetupChoiceCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.status,
+    this.statusColor,
+    this.busy = false,
+    required this.expanded,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = _WizardTone.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: GlassBlur(
+        sigmaX: 28,
+        sigmaY: 28,
+        child: Container(
+          decoration: BoxDecoration(
+            color: tone.fill(),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: tone.border()),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onTap,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withValues(alpha: 0.18),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(icon, size: 22, color: scheme.primary),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: TextStyle(
+                                  color: tone.fg,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                subtitle,
+                                style: TextStyle(
+                                  color: tone.muted,
+                                  fontSize: 13,
+                                  height: 1.3,
+                                ),
+                              ),
+                              if (status != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  status!,
+                                  style: TextStyle(
+                                    color: statusColor ?? tone.fg,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (busy)
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: tone.muted,
+                            ),
+                          )
+                        else
+                          AnimatedRotation(
+                            turns: expanded ? 0.5 : 0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: tone.muted,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: expanded
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
+                        child: child,
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Name page: a tiny picture of one chat look (full-width replies or
+/// texting-style bubbles) that the user taps to choose.
+class _ChatStyleTile extends StatelessWidget {
+  final bool fullWidth;
+  final bool selected;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ChatStyleTile({
+    required this.fullWidth,
+    required this.selected,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = _WizardTone.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final textLine = tone.fg.withValues(alpha: tone.light ? 0.28 : 0.4);
+    final assistantBubble = tone.fg.withValues(alpha: tone.light ? 0.08 : 0.14);
+
+    Widget line(double widthFactor, Color color) => FractionallySizedBox(
+          widthFactor: widthFactor,
+          alignment: Alignment.centerLeft,
+          child: Container(
+            height: 6,
+            margin: const EdgeInsets.only(bottom: 5),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        );
+
+    final userBubble = Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        width: 56,
+        height: 18,
+        decoration: BoxDecoration(
+          color: scheme.primary,
+          borderRadius: BorderRadius.circular(9),
+        ),
+      ),
+    );
+
+    final reply = fullWidth
+        ? Column(
+            children: [
+              line(1, textLine),
+              line(1, textLine),
+              line(0.95, textLine),
+              line(0.6, textLine),
+            ],
+          )
+        : Align(
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: 0.78,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 3),
+                decoration: BoxDecoration(
+                  color: assistantBubble,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                    bottomRight: Radius.circular(12),
+                    bottomLeft: Radius.circular(3),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    line(1, textLine),
+                    line(1, textLine),
+                    line(0.55, textLine),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$title, $subtitle',
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: tone.fill(),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? scheme.primary : tone.border(),
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 92,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    userBubble,
+                    const SizedBox(height: 10),
+                    reply,
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        color: tone.fg,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    selected
+                        ? Icons.check_circle_rounded
+                        : Icons.circle_outlined,
+                    size: 18,
+                    color: selected ? scheme.primary : tone.muted,
+                  ),
+                ],
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(color: tone.muted, fontSize: 12),
+              ),
+            ],
           ),
         ),
       ),

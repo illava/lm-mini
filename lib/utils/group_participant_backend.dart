@@ -64,4 +64,57 @@ abstract final class GroupParticipantBackend {
     if (isKnown(globalKind)) return globalKind!;
     return 'lmStudio';
   }
+
+  /// Setup-screen check for a non-cloud participant. Returns the problem to
+  /// show, or null when it can chat. Cloud providers are checked by the
+  /// caller (they need the provider list and Pro state).
+  ///
+  /// * [readyLocalEngine]: engine of a downloaded on-device model, or null.
+  /// * [lmStudioModelKnown] / [homeModelKnown]: null when the catalog is not
+  ///   loaded (then any non-empty id is accepted, like 1:1 chat).
+  /// * [appleIntelligenceAvailable]: null while the OS check is pending.
+  static String? configError({
+    required String kind,
+    required String displayName,
+    required String modelId,
+    LocalEngine? Function(String id)? readyLocalEngine,
+    bool Function(String id)? lmStudioModelKnown,
+    bool Function(String id)? homeModelKnown,
+    bool? appleIntelligenceAvailable,
+  }) {
+    switch (kind) {
+      case 'onDeviceGguf':
+      case 'onDeviceMlx':
+        if (modelId.isEmpty) return '$displayName: pick an on-device model.';
+        final engine = readyLocalEngine?.call(modelId);
+        if (engine == null) {
+          return '$displayName: on-device model is not downloaded.';
+        }
+        final expected =
+            kind == 'onDeviceMlx' ? LocalEngine.mlx : LocalEngine.fllama;
+        if (engine != expected) {
+          return '$displayName: model engine does not match provider.';
+        }
+        return null;
+      case 'lmStudio':
+        if (modelId.isEmpty) return '$displayName: pick an LM Studio model.';
+        if (lmStudioModelKnown != null && !lmStudioModelKnown(modelId)) {
+          return '$displayName: model not available on LM Studio.';
+        }
+        return null;
+      case 'lmMiniDesktop':
+        if (modelId.isEmpty) return '$displayName: pick a model on Home.';
+        if (homeModelKnown != null && !homeModelKnown(modelId)) {
+          return '$displayName: model not available on Home.';
+        }
+        return null;
+      case 'appleIntelligence':
+        if (appleIntelligenceAvailable == false) {
+          return '$displayName: Apple Intelligence is not available on this device.';
+        }
+        return null;
+      default:
+        return '$displayName: unknown provider. Pick provider & model again.';
+    }
+  }
 }

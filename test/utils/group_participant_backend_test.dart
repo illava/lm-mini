@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lm_mini/models/local_model_spec.dart';
 import 'package:lm_mini/utils/group_participant_backend.dart';
 
 void main() {
@@ -69,5 +70,125 @@ void main() {
       ),
       'lmStudio',
     );
+  });
+
+  group('configError', () {
+    test('Apple Intelligence is valid unless the OS says no', () {
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'appleIntelligence',
+          displayName: 'Apple',
+          modelId: 'Apple Intelligence',
+          appleIntelligenceAvailable: true,
+        ),
+        isNull,
+      );
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'appleIntelligence',
+          displayName: 'Apple',
+          modelId: '',
+        ),
+        isNull,
+      );
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'appleIntelligence',
+          displayName: 'Apple',
+          modelId: 'Apple Intelligence',
+          appleIntelligenceAvailable: false,
+        ),
+        contains('not available'),
+      );
+    });
+
+    test('LM Mini Home is validated like LM Studio, not "unknown"', () {
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'lmMiniDesktop',
+          displayName: 'Home',
+          modelId: 'qwen3-8b',
+        ),
+        isNull,
+      );
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'lmMiniDesktop',
+          displayName: 'Home',
+          modelId: '',
+        ),
+        contains('pick a model'),
+      );
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'lmMiniDesktop',
+          displayName: 'Home',
+          modelId: 'gone',
+          homeModelKnown: (_) => false,
+        ),
+        contains('not available on Home'),
+      );
+    });
+
+    test('on-device engine must match the provider', () {
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'onDeviceMlx',
+          displayName: 'M',
+          modelId: 'gemma',
+          readyLocalEngine: (_) => LocalEngine.fllama,
+        ),
+        contains('engine'),
+      );
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'onDeviceGguf',
+          displayName: 'G',
+          modelId: 'gemma',
+          readyLocalEngine: (_) => null,
+        ),
+        contains('not downloaded'),
+      );
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'onDeviceGguf',
+          displayName: 'G',
+          modelId: 'gemma',
+          readyLocalEngine: (_) => LocalEngine.fllama,
+        ),
+        isNull,
+      );
+    });
+
+    test('LM Studio model must be in a loaded catalog', () {
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'lmStudio',
+          displayName: 'L',
+          modelId: 'x',
+          lmStudioModelKnown: (_) => false,
+        ),
+        contains('not available on LM Studio'),
+      );
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'lmStudio',
+          displayName: 'L',
+          modelId: 'x',
+        ),
+        isNull,
+      );
+    });
+
+    test('unknown kinds are rejected', () {
+      expect(
+        GroupParticipantBackend.configError(
+          kind: 'mystery',
+          displayName: 'X',
+          modelId: 'y',
+        ),
+        contains('unknown provider'),
+      );
+    });
   });
 }

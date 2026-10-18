@@ -28,6 +28,7 @@ struct LMChatActivityAttributes: ActivityAttributes {
   private var pendingAction: String?
   private var currentActivity: Any? // Activity<LMChatActivityAttributes> stored as Any for availability
   private var mlxBridge: MLXBridge?
+  private var appleAIBridge: AppleIntelligenceBridge?
   private var moeStreamBridge: MoeStreamBridge?
   private var onDeviceSdBridge: OnDeviceSdBridge?
   private var lanHostnameLookup: LanHostnameLookup?
@@ -87,6 +88,7 @@ struct LMChatActivityAttributes: ActivityAttributes {
       // packages are absent this falls back to a stub that returns a
       // descriptive error to the Dart side.
       mlxBridge = MLXBridge(messenger: controller.binaryMessenger)
+      appleAIBridge = AppleIntelligenceBridge(messenger: controller.binaryMessenger)
       moeStreamBridge = MoeStreamBridge(messenger: controller.binaryMessenger)
 
       // On-device Core ML Stable Diffusion (optional SPM — see

@@ -33,6 +33,17 @@ class DeepLinkService {
     _pendingAction = null;
   }
 
+  /// Fire an action from inside the app (e.g. the welcome wizard opening a
+  /// new chat when it closes). Same delivery as a widget/Shortcut action.
+  void dispatch(DeepLinkAction action, [String? arg]) {
+    final event = DeepLinkActionEvent(action, arg);
+    if (_actionController.hasListener) {
+      _actionController.add(event);
+    } else {
+      _pendingAction = event;
+    }
+  }
+
   Future<void> initialize() async {
     // Set up method channel to receive actions from native code
     _channel.setMethodCallHandler(_handleMethodCall);

@@ -4074,24 +4074,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'En LM Studio, abre el modo Desarrollador → Ajustes del servidor → Gestionar tokens para crear o copiar tu clave API.';
 
   @override
-  String get welcomeWizardTitle => 'Bienvenido a LM Mini';
-
-  @override
-  String get welcomeWizardSubtitle =>
-      'Chatea con modelos de IA que se ejecutan en tu red local mediante LM Studio. Vamos a configurarlo en unos pocos pasos rápidos.';
-
-  @override
   String get welcomeWizardThemeTitle => 'Elige tu tema';
-
-  @override
-  String get welcomeWizardThemeSystemSubtitle =>
-      'Coincidir con la configuración del dispositivo';
-
-  @override
-  String get welcomeWizardThemeLightSubtitle => 'Limpio y brillante';
-
-  @override
-  String get welcomeWizardThemeDarkSubtitle => 'Suave para la vista';
 
   @override
   String get welcomeWizardAppearanceTitle => 'Personalizar apariencia';
@@ -4101,35 +4084,7 @@ class AppLocalizationsEs extends AppLocalizations {
       '¡Hola! Así es como se verán tus mensajes de chat.';
 
   @override
-  String get welcomeWizardServerTitle => 'Conectar con LM Studio';
-
-  @override
-  String get welcomeWizardServerSubtitle =>
-      'Introduce la dirección IP del ordenador que ejecuta LM Studio en tu red local.';
-
-  @override
-  String get welcomeWizardLocalNetworkNote =>
-      'iOS pedirá permiso para la red local cuando pruebes la conexión. Permítelo.';
-
-  @override
   String get apiTokenOptionalLabel => 'Token de API (opcional)';
-
-  @override
-  String get welcomeWizardChangeLater =>
-      'Siempre puedes cambiar esto más tarde en Ajustes.';
-
-  @override
-  String get welcomeWizardFindModelTitle => 'Encuentra un modelo que encaje';
-
-  @override
-  String get welcomeWizardFindModelSubtitle =>
-      'Compara dos opciones y mira cuál es más rápida en tu equipo. Tarda aproximadamente un minuto — o sáltalo si ya sabes qué quieres.';
-
-  @override
-  String get welcomeWizardFindModelHelp => 'Ayúdame a elegir';
-
-  @override
-  String get welcomeWizardFindModelSkip => 'Saltar — yo elijo';
 
   @override
   String get welcomeWizardExperienceTitle => 'How do you use AI?';
@@ -4167,20 +4122,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Pick a model or connect a desktop server.';
 
   @override
-  String get welcomeWizardOnDeviceSection => 'On this device';
-
-  @override
-  String get welcomeWizardComputerSection => 'On your computer';
-
-  @override
-  String get welcomeWizardScanningWifi => 'Looking on Wi‑Fi…';
-
-  @override
-  String welcomeWizardFoundCount(int count) {
-    return 'Found $count';
-  }
-
-  @override
   String get welcomeWizardModelFasterBlurb =>
       'Quick replies. Great for everyday chat.';
 
@@ -4213,12 +4154,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get welcomeWizardConnectLmStudio => 'Connect LM Studio';
-
-  @override
-  String get welcomeWizardConnectOllama => 'Connect Ollama';
-
-  @override
-  String get welcomeWizardConnectOmlx => 'Connect oMLX';
 
   @override
   String get pickColor => 'Elegir color';
@@ -5171,16 +5106,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get encryptionKeyUpdated => 'Clave de cifrado actualizada';
 
   @override
-  String get keepLmMiniAlive => 'Mantén LM Mini\ncon vida';
-
-  @override
-  String get supportTheApp => 'Apoya la app y obtén beneficios premium';
-
-  @override
-  String get mostFeaturesFree =>
-      'La mayoría de funciones son gratis — Pro ayuda a cubrir los costos del servidor';
-
-  @override
   String get thankYouSupport => '¡Gracias por tu apoyo!';
 
   @override
@@ -5228,16 +5153,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get premiumDisabled => 'Premium desactivado';
-
-  @override
-  String supportYearly(String price) {
-    return 'Apoyar — $price/año';
-  }
-
-  @override
-  String supportMonthly(String price) {
-    return 'Apoyar — $price/mes';
-  }
 
   @override
   String get welcomeToLmMiniPro => '¡Bienvenido a LM Mini Pro!';
@@ -5394,10 +5309,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'El chat grupal es de solo lectura sin Pro. Actualiza para enviar mensajes.';
 
   @override
-  String get premiumArena => 'Arena';
+  String get premiumArena => 'Arena Pro';
 
   @override
-  String get premiumArenaTagline => 'Compara modelos lado a lado';
+  String get premiumArenaTagline =>
+      'Carreras propias, modelos en la nube e historial';
 
   @override
   String get premiumArenaDescription =>
@@ -6141,13 +6057,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get welcomeWizardRequiresApiKey => 'Requiere clave API';
-
-  @override
-  String get welcomeWizardScanHomeQr => 'Escanear QR de LM Mini Home';
-
-  @override
-  String get welcomeWizardScanHomeQrSubtitle =>
-      'Empareja con tu Mac desde Compartir con el teléfono';
 
   @override
   String welcomeWizardModelsFound(int count) {
@@ -7398,4 +7307,489 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get remoteAccessTurnOffFailed =>
       'No se pudo desactivar el acceso remoto. Inténtalo de nuevo.';
+
+  @override
+  String get appleIntelligenceBadge => 'Integrado en este dispositivo';
+
+  @override
+  String get appleIntelligenceSubtitle =>
+      'Sin descarga · privado · funciona sin conexión';
+
+  @override
+  String get appleIntelligenceUse => 'Usar';
+
+  @override
+  String get appleIntelligenceInUse => 'En uso';
+
+  @override
+  String get appleIntelligenceTurnOn =>
+      'Activa Apple Intelligence en Ajustes para usarlo';
+
+  @override
+  String get appleIntelligenceGettingReady =>
+      'Apple Intelligence aún se está preparando en este dispositivo';
+
+  @override
+  String get appleIntelligenceNowUsing =>
+      'Ahora chateas con Apple Intelligence';
+
+  @override
+  String get onboardingOrDownloadModel => 'O descarga un modelo';
+
+  @override
+  String get homeRunOnboarding => 'Ver bienvenida';
+
+  @override
+  String get onboardingDownloadModelTitle => 'Descargar un modelo';
+
+  @override
+  String get onboardingDownloadModelSubtitle =>
+      'En este dispositivo · privado · sin conexión';
+
+  @override
+  String get onboardingConnectComputerTitle => 'Conectar tu ordenador';
+
+  @override
+  String get onboardingConnectComputerSubtitle =>
+      'LM Studio, Ollama, Unsloth y más';
+
+  @override
+  String onboardingServersFound(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count servidores encontrados en tu Wi‑Fi',
+      one: '1 servidor encontrado en tu Wi‑Fi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onboardingModelReady(String name) {
+    return '$name está listo';
+  }
+
+  @override
+  String onboardingModelDownloading(String name, int percent) {
+    return 'Descargando $name · $percent %';
+  }
+
+  @override
+  String get onboardingChatStyleTitle => 'Estilo de chat';
+
+  @override
+  String get onboardingChatStyleFullWidth => 'Ancho completo';
+
+  @override
+  String get onboardingChatStyleFullWidthHint =>
+      'Las respuestas usan toda la pantalla';
+
+  @override
+  String get onboardingChatStyleBubbles => 'Burbujas';
+
+  @override
+  String get onboardingChatStyleBubblesHint => 'Como mensajes de texto';
+
+  @override
+  String get firstChatNameQuestion => '¡Hola! ¿Cómo quieres que te llame?';
+
+  @override
+  String get firstChatNameHint => 'Tu nombre o un apodo';
+
+  @override
+  String get firstChatNameSave => 'Guardar';
+
+  @override
+  String get firstChatNameSkip => 'Ahora no';
+
+  @override
+  String firstChatNameSaved(String name) {
+    return '¡Encantado de conocerte, $name! Lo recordaré.';
+  }
+
+  @override
+  String get firstChatNameMemoryChip => 'Guardado en la memoria';
+
+  @override
+  String get paywallHeadline => 'Desbloquea LM Mini Pro';
+
+  @override
+  String get paywallSubtitle =>
+      'Búsqueda web, modelos en la nube, memoria, acceso remoto y más.';
+
+  @override
+  String paywallFeatureIsPro(String feature) {
+    return '$feature es una función Pro';
+  }
+
+  @override
+  String get paywallAlsoIncluded => 'Pro también incluye:';
+
+  @override
+  String paywallMoreFeatures(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '+$count funciones Pro más',
+      one: '+1 función Pro más',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get paywallShowLess => 'Mostrar menos';
+
+  @override
+  String get paywallGetPro => 'Obtener Pro';
+
+  @override
+  String paywallPerMonth(String price) {
+    return '$price/mes';
+  }
+
+  @override
+  String aiModelsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count modelos de IA',
+      one: '1 modelo de IA',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String modelFamilyOnDevice(int count) {
+    return '$count en este dispositivo';
+  }
+
+  @override
+  String get modelRecommended => 'Mejor calidad';
+
+  @override
+  String get olderModelsTitle => 'Modelos anteriores';
+
+  @override
+  String get olderModelsSubtitle => 'Descargados antes de la actualización';
+
+  @override
+  String get lockedSearchChip => 'Búsqueda';
+
+  @override
+  String get lockedCodeChip => 'Código';
+
+  @override
+  String get premiumCodeSandboxTagline => 'Respuestas exactas con código real';
+
+  @override
+  String get teaserSearchTitle => 'Deja que tu modelo busque en la web';
+
+  @override
+  String get teaserSearchPoint1 =>
+      'Tu modelo busca información al día: noticias, precios, clima, deportes.';
+
+  @override
+  String get teaserSearchPoint2 =>
+      'Solo se envían las palabras de búsqueda, nunca tu chat.';
+
+  @override
+  String get teaserSearchPoint3 =>
+      'Sin configurar nada: ni claves API ni servidor. Con fuentes.';
+
+  @override
+  String get teaserSearchDemoQuery => '¿Clima en Tokio hoy?';
+
+  @override
+  String get teaserSearchDemoResult1 => 'AccuWeather · Pronóstico Tokio';
+
+  @override
+  String get teaserSearchDemoResult2 => 'timeanddate.com · Hoy en Tokio';
+
+  @override
+  String get teaserSearchDemoResult3 => 'Agencia Meteorológica de Japón';
+
+  @override
+  String get teaserSandboxTitle => 'Deja que tu modelo ejecute código';
+
+  @override
+  String get teaserSandboxPoint1 =>
+      'Tu modelo escribe Python o JavaScript y lo ejecuta para dar respuestas exactas.';
+
+  @override
+  String get teaserSandboxPoint2 =>
+      'Ideal para matemáticas, datos, conversiones y revisar su propio trabajo.';
+
+  @override
+  String get teaserSandboxPoint3 =>
+      'El código se ejecuta en un entorno aislado, nunca en tu dispositivo.';
+
+  @override
+  String get teaserSandboxDemoSafe => 'Sandbox';
+
+  @override
+  String get teaserSandboxDemoExact => 'exacto';
+
+  @override
+  String get teaserExportTitle => 'Guarda tus chats junto a tus notas';
+
+  @override
+  String get teaserExportPoint1 =>
+      'Exporta cualquier chat en Markdown directamente a tu bóveda de Obsidian.';
+
+  @override
+  String get teaserExportPoint2 =>
+      'O guárdalo como PDF, texto o JSON, o compártelo con cualquier app.';
+
+  @override
+  String get teaserExportPoint3 =>
+      'El razonamiento, el código y las imágenes van incluidos con buen formato.';
+
+  @override
+  String get teaserExportDemoFiles => 'Archivos';
+
+  @override
+  String get teaserGroupTitle => 'Chatea con varias IA a la vez';
+
+  @override
+  String get teaserGroupPoint1 =>
+      'Añade personas y modelos a un chat y deja que respondan por turnos.';
+
+  @override
+  String get teaserGroupPoint2 =>
+      'Combina modelos: uno local en tu teléfono, LM Studio o uno en la nube.';
+
+  @override
+  String get teaserGroupPoint3 =>
+      'Ideal para segundas opiniones, debates, rol y lluvia de ideas.';
+
+  @override
+  String get teaserGroupDemoQuestion => '¿Mejor ciudad para un fin de semana?';
+
+  @override
+  String get teaserGroupDemoReply1 =>
+      'Lisboa: soleada, para caminar, gran comida.';
+
+  @override
+  String get teaserGroupDemoReply2 =>
+      'Yo elegiría Kioto por sus templos y jardines.';
+
+  @override
+  String get teaserGroupDemoReply3 => 'Ambas. Lisboa es más barata en otoño.';
+
+  @override
+  String get teaserGroupDemoTag => '3 IA, un chat';
+
+  @override
+  String get newPersonaLabel => 'Nueva persona';
+
+  @override
+  String get fabChatLabel => 'Chat';
+
+  @override
+  String get fabGroupLabel => 'Grupo';
+
+  @override
+  String get groupAutonomousPaused =>
+      'Respuestas automáticas en pausa. Envía un mensaje o toca un nombre para continuar.';
+
+  @override
+  String get teaserRemoteTitle =>
+      'Usa la IA de tu ordenador desde cualquier lugar';
+
+  @override
+  String get teaserRemotePoint1 =>
+      'Chatea con LM Studio, Ollama y tus otros servidores con datos móviles o cualquier Wi‑Fi.';
+
+  @override
+  String get teaserRemotePoint2 =>
+      'La conexión está cifrada y solo entra tu teléfono emparejado. Nadie en la misma Wi‑Fi puede leerla.';
+
+  @override
+  String get teaserRemotePoint3 =>
+      'El relé pasa los mensajes sin guardarlos. Empareja una vez con un código QR en LM Mini Connect.';
+
+  @override
+  String get teaserRemoteDemoPhone => 'Teléfono';
+
+  @override
+  String get teaserRemoteDemoRelay => 'Relé seguro';
+
+  @override
+  String get teaserRemoteDemoTag => 'Funciona fuera de casa';
+
+  @override
+  String get teaserLiveTitle => 'Las respuestas siguen al salir de la app';
+
+  @override
+  String get teaserLivePoint1 =>
+      'Cambia de app o bloquea el teléfono: la respuesta sigue generándose.';
+
+  @override
+  String get teaserLivePoint2 =>
+      'Sigue el progreso en la pantalla bloqueada y la Dynamic Island.';
+
+  @override
+  String get teaserLivePoint3 =>
+      'Te avisamos en cuanto la respuesta esté lista.';
+
+  @override
+  String get teaserLiveDemoWorking => 'LM Mini está escribiendo…';
+
+  @override
+  String get teaserLiveDemoDone => 'Respuesta lista';
+
+  @override
+  String get teaserCompactTitle => 'Nunca llegues al límite de contexto';
+
+  @override
+  String get teaserCompactPoint1 =>
+      'Cuando un chat es demasiado largo, Compactar resume la parte antigua.';
+
+  @override
+  String get teaserCompactPoint2 =>
+      'Sigue en el mismo chat sin perder el hilo.';
+
+  @override
+  String get teaserCompactPoint3 => 'Un toque y el indicador vuelve a bajar.';
+
+  @override
+  String get teaserCompactDemoSummary =>
+      'Resumen del chat anterior: tu viaje, presupuesto y fechas.';
+
+  @override
+  String get teaserRemoteDemoServer => 'Servidor de casa';
+
+  @override
+  String get teaserRemoteDemoQuestion => 'Resume mis notas';
+
+  @override
+  String get teaserRemoteDemoAnswer => 'Enviado desde casa';
+
+  @override
+  String get teaserRemoteDemoBlocked => 'Bloqueado';
+
+  @override
+  String get teaserRemoteDemoEncrypted => 'Cifrado';
+
+  @override
+  String get teaserRemoteDemoPaired => 'Solo tu teléfono';
+
+  @override
+  String get teaserRemoteDemoNotStored => 'Sin guardar';
+
+  @override
+  String get teaserLiveDemoIsland => 'Respondiendo';
+
+  @override
+  String get teaserLockTitle => 'Mantén tus chats en privado';
+
+  @override
+  String teaserLockPoint1(String method) {
+    return 'LM Mini se bloquea al salir y se abre con $method o tu PIN.';
+  }
+
+  @override
+  String get teaserLockPoint2 =>
+      'Quien tome tu teléfono verá un candado, no tus chats.';
+
+  @override
+  String get teaserLockPoint3 =>
+      'Elige cuándo se vuelve a bloquear: al instante o tras unos minutos.';
+
+  @override
+  String get teaserLockDemoUnlocked => 'Desbloqueado';
+
+  @override
+  String get teaserLockDemoFingerprint => 'Huella';
+
+  @override
+  String appLockSubtitleBiometric(String method) {
+    return 'Pedir $method o un PIN al cerrar la app';
+  }
+
+  @override
+  String get biometricFaceId => 'Face ID';
+
+  @override
+  String get biometricTouchId => 'Touch ID';
+
+  @override
+  String get biometricFingerprint => 'la huella';
+
+  @override
+  String get biometricFaceUnlock => 'el desbloqueo facial';
+
+  @override
+  String get teaserBranchTitle => 'Prueba otro camino sin perder este';
+
+  @override
+  String get teaserBranchPoint1 =>
+      'Crea una rama desde cualquier mensaje para explorar otra pregunta o respuesta.';
+
+  @override
+  String get teaserBranchPoint2 =>
+      'La conversación original queda tal como estaba.';
+
+  @override
+  String get teaserBranchPoint3 =>
+      'Cambia entre ramas cuando quieras para comparar.';
+
+  @override
+  String get teaserBranchDemoQuestion => 'Planea un viaje de 3 días';
+
+  @override
+  String get teaserBranchDemoA => 'Rama A';
+
+  @override
+  String get teaserBranchDemoB => 'Rama B';
+
+  @override
+  String get teaserBranchDemoReplyA => 'Días de playa en Lisboa';
+
+  @override
+  String get teaserBranchDemoReplyB => 'Senderismo en los Alpes';
+
+  @override
+  String get teaserStatsTitle => 'Mira cómo rinden de verdad tus modelos';
+
+  @override
+  String get teaserStatsPoint1 =>
+      'Velocidad, tiempo hasta el primer token y número de tokens de cada modelo.';
+
+  @override
+  String get teaserStatsPoint2 =>
+      'Detecta de un vistazo el modelo más rápido en tu teléfono u ordenador.';
+
+  @override
+  String get teaserStatsPoint3 =>
+      'Se guardan en privado en tu cuenta y te acompañan a un dispositivo nuevo.';
+
+  @override
+  String get teaserStatsDemoMessages => 'mensajes';
+
+  @override
+  String get teaserStatsDemoFirstToken => 'primer token';
+
+  @override
+  String get teaserBackupTitle => 'Haz copia de tus chats en privado';
+
+  @override
+  String get teaserBackupPoint1 =>
+      'Los chats se cifran en tu teléfono con tu propia frase de contraseña antes de subirse.';
+
+  @override
+  String get teaserBackupPoint2 => 'Ni siquiera nosotros podemos leerlos.';
+
+  @override
+  String get teaserBackupPoint3 =>
+      'Restaura todo en un teléfono nuevo con tu frase de contraseña.';
+
+  @override
+  String get teaserBackupDemoThis => 'Este teléfono';
+
+  @override
+  String get teaserBackupDemoNew => 'Teléfono nuevo';
+
+  @override
+  String get teaserBackupDemoRestored => 'Chats restaurados';
 }

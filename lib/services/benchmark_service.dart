@@ -22,7 +22,7 @@ import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../models/arena_models.dart';
 import '../models/arena_run.dart';
-import '../pro/arena/arena_history_store.dart';
+import 'arena_history_store.dart';
 import 'arena_prompt_set.dart';
 
 class BenchmarkService {

@@ -77,8 +77,10 @@ class ModelCatalogCard extends StatelessWidget {
                             _Badge(
                               label: 'Loaded',
                               fg: const Color(0xFF6EE7B7),
-                              bg: const Color(0xFF34D399).withValues(alpha: 0.14),
-                              border: const Color(0xFF34D399).withValues(alpha: 0.28),
+                              bg: const Color(0xFF34D399)
+                                  .withValues(alpha: 0.14),
+                              border: const Color(0xFF34D399)
+                                  .withValues(alpha: 0.28),
                             ),
                           if (model.isSelected && !model.isLoaded)
                             _Badge(
@@ -92,16 +94,20 @@ class ModelCatalogCard extends StatelessWidget {
                             _Badge(
                               label: model.typeLabel!,
                               fg: const Color(0xFFC4B5FD),
-                              bg: const Color(0xFFA78BFA).withValues(alpha: 0.12),
-                              border: const Color(0xFFA78BFA).withValues(alpha: 0.28),
+                              bg: const Color(0xFFA78BFA)
+                                  .withValues(alpha: 0.12),
+                              border: const Color(0xFFA78BFA)
+                                  .withValues(alpha: 0.28),
                             ),
                           if (model.quantLabel != null &&
                               model.quantLabel!.isNotEmpty)
                             _Badge(
                               label: model.quantLabel!,
                               fg: const Color(0xFFFCD34D),
-                              bg: const Color(0xFFFBBF24).withValues(alpha: 0.12),
-                              border: const Color(0xFFFBBF24).withValues(alpha: 0.28),
+                              bg: const Color(0xFFFBBF24)
+                                  .withValues(alpha: 0.12),
+                              border: const Color(0xFFFBBF24)
+                                  .withValues(alpha: 0.28),
                             ),
                           if (model.supportsVision)
                             _Badge(
@@ -114,8 +120,10 @@ class ModelCatalogCard extends StatelessWidget {
                             _Badge(
                               label: 'Reasoning',
                               fg: const Color(0xFFC4B5FD),
-                              bg: const Color(0xFFA78BFA).withValues(alpha: 0.12),
-                              border: const Color(0xFFA78BFA).withValues(alpha: 0.28),
+                              bg: const Color(0xFFA78BFA)
+                                  .withValues(alpha: 0.12),
+                              border: const Color(0xFFA78BFA)
+                                  .withValues(alpha: 0.28),
                             ),
                         ],
                       ),

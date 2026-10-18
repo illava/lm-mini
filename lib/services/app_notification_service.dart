@@ -17,6 +17,25 @@ class AppNotificationService {
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
+  /// Called with the payload when the user taps a local notification while
+  /// the app is running. Set by [OpsAlertService] for support ticket pushes.
+  void Function(String? payload)? onTap;
+
+  /// Payload of the local notification that launched the app, if any.
+  /// Only meaningful after [initialize].
+  Future<String?> launchPayload() async {
+    if (!_initialized) await initialize();
+    if (!_initialized) return null;
+    try {
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      if (details?.didNotificationLaunchApp != true) return null;
+      return details?.notificationResponse?.payload;
+    } catch (e) {
+      debugPrint('⚠️ AppNotificationService.launchPayload failed: $e');
+      return null;
+    }
+  }
+
   Future<void> initialize() async {
     if (_initialized || kIsWeb) return;
 
@@ -35,6 +54,8 @@ class AppNotificationService {
           iOS: darwinSettings,
           macOS: darwinSettings,
         ),
+        onDidReceiveNotificationResponse: (response) =>
+            onTap?.call(response.payload),
       );
 
       if (Platform.isAndroid) {

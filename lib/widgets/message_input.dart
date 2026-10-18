@@ -34,6 +34,7 @@ import 'composer_shine_border.dart';
 import 'glass_toast.dart';
 import 'glass_blur.dart';
 import 'pro_badge.dart';
+import 'pro_feature_teaser.dart';
 import 'think_brain_icon.dart';
 import '../screens/subscription_screen.dart';
 import '../pro/pro_features.dart';
@@ -278,8 +279,57 @@ class _MessageInputState extends State<MessageInput> {
     return false;
   }
 
+  /// Free users on a tool-capable model see Search and Code locked (PRO);
+  /// tapping explains the feature, then offers Pro. Never in the public build.
+  bool get _canShowLockedProTools {
+    final s = widget.settings;
+    if (s == null || !ProFeatures.showUpsell) return false;
+    if (SubscriptionService().isPremium) return false;
+    if (!s.enableToolUse || s.useMcpToolsOnly) return false;
+    return _modelSupportsTools;
+  }
+
+  void _openProTeaser(PaywallFeature feature) =>
+      showProFeatureTeaser(context, feature);
+
+  Widget _lockedToolChip({
+    required String label,
+    required IconData icon,
+    required PaywallFeature feature,
+    required ColorScheme colorScheme,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ActionChip(
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        avatar: Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const ProBadge(compact: true),
+          ],
+        ),
+        side: BorderSide(color: colorScheme.outline.withValues(alpha: 0.2)),
+        onPressed: widget.isLoading ? null : () => _openProTeaser(feature),
+      ),
+    );
+  }
+
   bool get _hasMcpTools =>
       _canShowThinking ||
+      _canShowLockedProTools ||
       _canShowProSearch ||
       _canShowCodeSandbox ||
       _canShowSearxng ||
@@ -373,6 +423,22 @@ class _MessageInputState extends State<MessageInput> {
           ),
           tooltip: l10n.think,
         ),
+      if (_canShowLockedProTools) ...[
+        _collapsedToolIcon(
+          active: false,
+          colorScheme: colorScheme,
+          onTap: () => _openProTeaser(PaywallFeature.webSearch),
+          icon: Icons.travel_explore_rounded,
+          tooltip: l10n.lockedSearchChip,
+        ),
+        _collapsedToolIcon(
+          active: false,
+          colorScheme: colorScheme,
+          onTap: () => _openProTeaser(PaywallFeature.codeSandbox),
+          icon: Icons.terminal_rounded,
+          tooltip: l10n.lockedCodeChip,
+        ),
+      ],
       if (_canShowProSearch)
         _collapsedToolIcon(
           active: _isProSearchActive,
@@ -1233,6 +1299,20 @@ class _MessageInputState extends State<MessageInput> {
                       ),
                     ),
                   ),
+                if (_canShowLockedProTools) ...[
+                  _lockedToolChip(
+                    label: l10n.lockedSearchChip,
+                    icon: Icons.travel_explore_rounded,
+                    feature: PaywallFeature.webSearch,
+                    colorScheme: colorScheme,
+                  ),
+                  _lockedToolChip(
+                    label: l10n.lockedCodeChip,
+                    icon: Icons.terminal_rounded,
+                    feature: PaywallFeature.codeSandbox,
+                    colorScheme: colorScheme,
+                  ),
+                ],
                 // Pro Search chip (premium only, when applicable)
                 if (_canShowProSearch)
                   Padding(
@@ -1725,9 +1805,7 @@ class _MessageInputState extends State<MessageInput> {
   }
 
   void _openCompactPaywall() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-    );
+    showProFeatureTeaser(context, PaywallFeature.compactChat);
   }
 
   ContextUsageMessage _contextUsageMessage(ChatMessage message) {

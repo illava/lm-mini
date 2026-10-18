@@ -4,13 +4,18 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../models/paywall_feature.dart';
+
 /// Open-source build: informational page in place of the LM Mini Pro paywall.
 ///
 /// Pro features ship only in the official LM Mini app. This page explains that
 /// and links to the stores and the public source repository. It sells nothing.
 class SubscriptionScreen extends StatelessWidget {
   final bool embedded;
-  const SubscriptionScreen({super.key, this.embedded = false});
+
+  /// Ignored here (no paywall in the open-source build).
+  final PaywallFeature? highlight;
+  const SubscriptionScreen({super.key, this.embedded = false, this.highlight});
 
   static const String _appStoreUrl =
       'https://apps.apple.com/app/lm-mini/id6751125309';

@@ -26,6 +26,7 @@
 		30B443111CA84D97918E0E7F /* MLXRandom in Frameworks */ = {isa = PBXBuildFile; productRef = BF5854CFE231ED49EA88A419 /* MLXRandom */; };
 		331C80D8294CF71000263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C80D7294CF71000263BE5 /* RunnerTests.swift */; };
 		335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */; };
+		33C7BF4F23CB7B494DBDF3F1 /* AppleIntelligenceBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ED8B4D38C7B95B667FCEB73 /* AppleIntelligenceBridge.swift */; };
 		33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC10F02044A3C60003C045 /* AppDelegate.swift */; };
 		33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F22044A3C60003C045 /* Assets.xcassets */; };
 		33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F42044A3C60003C045 /* MainMenu.xib */; };
@@ -72,6 +73,7 @@
 
 /* Begin PBXFileReference section */
 		08AF32A599286A167DBCA42E /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
+		0ED8B4D38C7B95B667FCEB73 /* AppleIntelligenceBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceBridge.swift; sourceTree = "<group>"; };
 		2C8D1D8336CBBCA70B29A97D /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		2F2E280D9AAD72E88B50CAF2 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		331C80D5294CF71000263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -202,6 +204,7 @@
 				33BA886A226E78AF003329D5 /* Configs */,
 				677712A633056D43803D5B25 /* MLXBridge.swift */,
 				677712A633056D43803D5B26 /* MacSpeechBridge.swift */,
+				0ED8B4D38C7B95B667FCEB73 /* AppleIntelligenceBridge.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -518,6 +521,7 @@
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 				3A4740E4C9D246577A856A56 /* MLXBridge.swift in Sources */,
 				3A4740E4C9D246577A856A57 /* MacSpeechBridge.swift in Sources */,
+				33C7BF4F23CB7B494DBDF3F1 /* AppleIntelligenceBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

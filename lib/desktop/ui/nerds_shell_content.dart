@@ -23,9 +23,9 @@ class NerdsShellContent extends StatefulWidget {
 
 class _NerdsShellContentState extends State<NerdsShellContent> {
   // Logs stays in the enum / detail switch for the next build review.
-  // Analytics is a Pro screen: listed only when Pro is compiled in.
+  // Analytics is a Pro screen: listed for Pro users only.
   List<_NerdsCategory> get _visibleCategories => [
-        if (ProFeatures.included) _NerdsCategory.analytics,
+        if (ProFeatures.isPro) _NerdsCategory.analytics,
         _NerdsCategory.runtime,
         _NerdsCategory.relay,
         _NerdsCategory.services,

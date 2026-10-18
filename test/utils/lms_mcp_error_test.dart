@@ -129,4 +129,24 @@ void main() {
       );
     });
   });
+
+  group('LmsMcpError non-public MCP address', () {
+    const raw = "Unable to connect to remote MCP server 'searxng' at url "
+        "'http://searxng.h/mcp'. URL resolves to a non-public address. We "
+        'only allow public addresses for dynamic remote MCP connections.';
+
+    test('explains that LAN MCPs must be set up in LM Studio', () {
+      final msg = LmsMcpError.userMessage(raw,
+          errorType: LmsMcpError.mcpConnectionType);
+      expect(msg, contains('"searxng"'));
+      expect(msg, contains('mcp.json'));
+      expect(msg, isNot(contains('Pro Search')));
+    });
+
+    test('streaming status reads as unreachable, not Pro Search', () {
+      final msg = LmsMcpError.userMessage(raw,
+          errorType: LmsMcpError.mcpConnectionType);
+      expect(LmsMcpError.streamingStatus(msg), '⚠️ MCP server unreachable...');
+    });
+  });
 }

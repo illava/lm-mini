@@ -68,16 +68,16 @@ void main() {
       expect(d(HostScope.loopback, lan: true), PreflightDecision.proceed);
     });
 
-    test('offline blocks every non-loopback scope', () {
+    test('offline never blocks: the server is tried first', () {
       for (final s in [
         HostScope.localNetwork,
         HostScope.vpnRange,
         HostScope.public,
       ]) {
-        expect(d(s, offline: true), PreflightDecision.blockOffline);
+        expect(d(s, offline: true), PreflightDecision.probe);
         expect(
           d(s, offline: true, lan: true, vpn: true),
-          PreflightDecision.blockOffline,
+          PreflightDecision.probe,
         );
       }
     });
@@ -94,7 +94,7 @@ void main() {
       expect(d(HostScope.vpnRange, vpn: true), PreflightDecision.probe);
     });
 
-    test('localNetwork: probe on Wi‑Fi or VPN, needs Wi‑Fi on mobile only',
+    test('localNetwork: always probed, even on mobile data (unreported VPN)',
         () {
       expect(d(HostScope.localNetwork, lan: true), PreflightDecision.probe);
       expect(d(HostScope.localNetwork, vpn: true), PreflightDecision.probe);
@@ -102,7 +102,7 @@ void main() {
         d(HostScope.localNetwork, lan: true, vpn: true),
         PreflightDecision.probe,
       );
-      expect(d(HostScope.localNetwork), PreflightDecision.blockNeedsWifi);
+      expect(d(HostScope.localNetwork), PreflightDecision.probe);
     });
   });
 

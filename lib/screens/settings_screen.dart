@@ -31,6 +31,9 @@ import 'transcription_settings_screen.dart';
 import 'image_generation_settings_screen.dart';
 import 'group_chat_setup_screen.dart';
 import 'subscription_screen.dart';
+import '../widgets/pro_badge.dart';
+import '../widgets/pro_feature_teaser.dart';
+import '../utils/biometric_label.dart';
 import 'cloud_backup_screen.dart';
 import 'account_screen.dart';
 import 'analytics_screen.dart';
@@ -83,6 +86,8 @@ import '../desktop/ui/desktop_host_screen.dart';
 import '../desktop/runtime/desktop_runtime_manager.dart';
 import 'settings_nav.dart';
 import '../pro/pro_features.dart';
+import '../utils/share_helper.dart';
+import 'package:share_plus/share_plus.dart' show ShareResultStatus;
 
 part '../pro/settings/settings_screen_pro.dart';
 
@@ -442,6 +447,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
 
+      // Remote Access, locked for free users: explains it, then Pro.
+      if (!ProFeatures.isPro && ProFeatures.showUpsell)
+        _buildSection(
+          context,
+          title: l10n.remoteAccess,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.cloud_sync_outlined),
+              title: Text(l10n.premiumRemoteAccess),
+              subtitle: Text(l10n.premiumRemoteAccessTagline),
+              trailing: const ProBadge(compact: true),
+              onTap: () =>
+                  showProFeatureTeaser(context, PaywallFeature.remoteAccess),
+            ),
+          ],
+        ),
       // Remote Access Section (premium only, shown first after server)
       if (ProFeatures.isPro)
         _buildSection(
@@ -867,29 +888,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context,
         title: l10n.dataSection,
         children: [
-          // Cloud Backup — premium feature
-          if (ProFeatures.isPro)
+          // Cloud Backup — Pro; free users see it locked (explainer).
+          if (ProFeatures.isPro || ProFeatures.showUpsell)
             ListTile(
               leading: const Icon(Icons.enhanced_encryption),
               title: _proTitle(l10n.cloudBackup),
               subtitle: Text(l10n.encryptedBackupRestore),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openSettingsScreen(
-                SettingsNavId.dataCloudBackup,
-                (_) => const CloudBackupScreen(),
-              ),
+              onTap: ProFeatures.isPro
+                  ? () => _openSettingsScreen(
+                        SettingsNavId.dataCloudBackup,
+                        (_) => const CloudBackupScreen(),
+                      )
+                  : () => showProFeatureTeaser(
+                      context, PaywallFeature.cloudBackup),
             ),
-          // Analytics — premium + Advanced (technical dashboard)
-          if (isAdvanced && ProFeatures.isPro)
+          // Analytics — Pro dashboard (Advanced for Pro users); free users
+          // see it locked (explainer).
+          if ((isAdvanced && ProFeatures.isPro) ||
+              (!ProFeatures.isPro && ProFeatures.showUpsell))
             ListTile(
               leading: const Icon(Icons.analytics_outlined),
               title: _proTitle(l10n.analytics),
               subtitle: Text(l10n.analyticsSubtitle),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openSettingsScreen(
-                SettingsNavId.dataAnalytics,
-                (_) => const AnalyticsScreen(),
-              ),
+              onTap: ProFeatures.isPro
+                  ? () => _openSettingsScreen(
+                        SettingsNavId.dataAnalytics,
+                        (_) => const AnalyticsScreen(),
+                      )
+                  : () =>
+                      showProFeatureTeaser(context, PaywallFeature.analytics),
             ),
           // Memory — premium feature
           if (ProFeatures.isPro)
@@ -909,31 +938,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
               listenable: AppLockService.instance,
               builder: (context, _) {
                 final lock = AppLockService.instance;
+                final locked = !ProFeatures.isPro && ProFeatures.showUpsell;
                 return ListTile(
                   leading: const Icon(Icons.lock_rounded),
                   title: _proTitle(l10n.appLock),
-                  subtitle: Text(
-                    lock.isEnabled
-                        ? l10n.appLockSubtitleOn(
-                            _appLockTimeoutLabel(l10n, lock.timeoutSeconds),
-                          )
-                        : l10n.appLockSubtitleOff,
+                  subtitle: FutureBuilder<BiometricMethod>(
+                    future: BiometricLabel.load(),
+                    builder: (context, snap) => Text(
+                      lock.isEnabled && !locked
+                          ? l10n.appLockSubtitleOn(
+                              _appLockTimeoutLabel(l10n, lock.timeoutSeconds),
+                            )
+                          : l10n.appLockSubtitleBiometric(
+                              BiometricLabel.text(l10n, snap.data),
+                            ),
+                    ),
                   ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _openSettingsScreen(
-                    SettingsNavId.dataAppLock,
-                    (_) => const AppLockSettingsScreen(),
-                  ),
+                  // Free users: show what App Lock does, not a locked page.
+                  onTap: locked
+                      ? () =>
+                          showProFeatureTeaser(context, PaywallFeature.appLock)
+                      : () => _openSettingsScreen(
+                            SettingsNavId.dataAppLock,
+                            (_) => const AppLockSettingsScreen(),
+                          ),
                 );
               },
             ),
           if (isAdvanced) ...[
-            ListTile(
-              leading: const Icon(Icons.download),
-              title: Text(l10n.exportAllChats),
-              subtitle: Text(l10n.exportAllChatsSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _exportAllChats(context),
+            Builder(
+              builder: (tileContext) => ListTile(
+                leading: const Icon(Icons.download),
+                title: Text(l10n.exportAllChats),
+                subtitle: Text(l10n.exportAllChatsSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    _exportAllChats(context, shareAnchor: tileContext),
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.upload_file),
@@ -962,9 +1004,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     settingsProvider.updateShowRuntimeInfo(value),
               ),
             ),
-          // Free users always share anonymized Arena speed rows.
-          // Pro may opt out.
-          if (SubscriptionService().isPremium)
+          // Arena is free; anyone can opt out of sharing speed rows.
             ListTile(
               leading: const Icon(Icons.emoji_events_outlined),
               title: Text(l10n.shareArenaSpeedResults),
@@ -980,6 +1020,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+            ),
+          // Live Activity, locked for free users on phones.
+          if (ProFeatures.showUpsell &&
+              (Platform.isIOS || Platform.isAndroid) &&
+              !SubscriptionService().isPremium)
+            ListTile(
+              leading: const Icon(Icons.broadcast_on_personal),
+              title: Text(
+                Platform.isAndroid
+                    ? l10n.liveActivityTitleAndroid
+                    : l10n.liveActivityTitle,
+              ),
+              subtitle: Text(
+                Platform.isAndroid
+                    ? l10n.liveActivityDescriptionAndroid
+                    : l10n.liveActivityDescription,
+              ),
+              trailing: const ProBadge(compact: true),
+              onTap: () =>
+                  showProFeatureTeaser(context, PaywallFeature.liveActivity),
             ),
           // Live Activity (iOS) / background generation (Android)
           if (ProFeatures.included &&
@@ -4167,7 +4227,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Tool/MCP methods moved to tool_settings_screen.dart
 
-  Future<void> _exportAllChats(BuildContext context) async {
+  Future<void> _exportAllChats(BuildContext context,
+      {BuildContext? shareAnchor}) async {
     final l10n = AppLocalizations.of(context);
     // Get count of conversations for the loading message
     final chatProvider = context.read<ChatProvider>();
@@ -4181,6 +4242,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       return;
     }
+
+    // iPad / macOS share popover anchor (read before any async gap).
+    final shareOrigin = shareOriginFor(shareAnchor ?? context);
 
     // Show loading indicator
     if (context.mounted) {
@@ -4207,10 +4271,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final exportService = ExportService();
-      await exportService.exportAllChats();
+      final result =
+          await exportService.exportAllChats(sharePositionOrigin: shareOrigin);
 
       if (context.mounted) {
         Navigator.of(context).pop(); // Close loading dialog
+        // Share sheet closed without sharing: no success message.
+        if (result.status == ShareResultStatus.dismissed) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(l10n.exportSuccess(conversationCount)),
@@ -4223,7 +4290,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Navigator.of(context).pop(); // Close loading dialog
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${l10n.exportFailed}: $e'),
+            content: Text(l10n.exportFailed('$e')),
             backgroundColor: Colors.red,
           ),
         );

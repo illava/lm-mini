@@ -278,7 +278,7 @@ class _AddServerSheet extends StatelessWidget {
     if (type.isPremium && !SubscriptionService().isPremium) {
       if (!ProFeatures.showUpsell) return;
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+        MaterialPageRoute(builder: (_) => const SubscriptionScreen(highlight: PaywallFeature.cloudModels)),
       );
       return;
     }

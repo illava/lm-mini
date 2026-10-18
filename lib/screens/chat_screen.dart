@@ -10,6 +10,7 @@ import '../models/group_chat_participant.dart';
 import '../models/lm_studio_model.dart';
 import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/first_chat_name_card.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/message_input.dart';
 import '../widgets/chat_customization_dialog.dart';
@@ -89,6 +90,11 @@ import '../screens/feature_requests_screen.dart';
 import '../main.dart' show firebaseInitialized;
 import 'package:lm_mini_premium/lm_mini_premium.dart';
 import '../pro/pro_features.dart';
+import '../widgets/pro_badge.dart';
+import '../widgets/pro_feature_teaser.dart';
+import '../models/paywall_feature.dart';
+import '../utils/share_helper.dart';
+import 'package:share_plus/share_plus.dart' show ShareResultStatus;
 
 part '../pro/group_chat/chat_screen_group.dart';
 part '../pro/export/chat_screen_export.dart';
@@ -1859,11 +1865,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                                                         ? () =>
                                                                             chatProvider.deleteSingleMessage(message.id)
                                                                         : null,
-                                                                    // Branch — only visible to premium users, hidden for group chat
+                                                                    // Branch — Pro; free users get the explainer. Hidden in group chats.
                                                                     onBranch: (!chatProvider.isSendingMessage &&
                                                                             !chatProvider.isGroupChat &&
-                                                                            ProFeatures.isPro)
-                                                                        ? () => _openBranch(message.id)
+                                                                            (ProFeatures.isPro || ProFeatures.showUpsell))
+                                                                        ? (ProFeatures.isPro
+                                                                            ? () => _openBranch(message.id)
+                                                                            : () => showProFeatureTeaser(context, PaywallFeature.branching))
                                                                         : null,
                                                                     onMessageUpdated:
                                                                         (updated) {
@@ -3366,6 +3374,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return;
     }
 
+    // iPad / macOS share popover anchor (read before any async gap).
+    final shareOrigin = shareOriginFor(context);
+
     // Show loading indicator
     if (context.mounted) {
       showDialog(
@@ -3391,10 +3402,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     try {
       final exportService = ExportService();
-      await exportService.exportChat(conversation, messages, format);
+      final result = await exportService.exportChat(
+          conversation, messages, format,
+          sharePositionOrigin: shareOrigin);
 
       if (context.mounted) {
         Navigator.of(context).pop(); // Close loading dialog
+        // Share sheet closed without sharing: no success message.
+        if (result.status == ShareResultStatus.dismissed) return;
         final msg = switch (format) {
           'pdf' => l10n.chatExportedAsPdf,
           'txt' => l10n.chatExportedAsTxt,
@@ -4219,7 +4234,9 @@ class _EmptyChatScrollBody extends StatelessWidget {
                         child: personaGreeting,
                       )
                     : showGreeting
-                        ? const Center(child: _EmptyChatGreeting())
+                        ? const FirstChatNameGate(
+                            child: Center(child: _EmptyChatGreeting()),
+                          )
                         : const SizedBox.shrink(),
               ),
               if (starters != null) starters,

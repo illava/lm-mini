@@ -147,10 +147,11 @@ class SupportNudgeDialog extends StatelessWidget {
                           MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
                         );
                       },
-                      icon: const Icon(Icons.favorite, size: 18),
-                      label: const Text(
-                        'Support LM Mini',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      icon: const Icon(Icons.workspace_premium, size: 18),
+                      label: Text(
+                        AppLocalizations.of(context).paywallGetPro,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 15),
                       ),
                     ),
                   ),

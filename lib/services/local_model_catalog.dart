@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../models/local_model_spec.dart';
 import 'device_capability_service.dart';
 
@@ -48,374 +50,561 @@ class LocalModelCatalog {
   /// MLX entries to the top on Apple Silicon. The list below is logical
   /// (small → large within a family); don't depend on its order in tests.
   ///
-  /// Catalog refreshed mid-2026: Qwen3 (+ Instruct-2507), Gemma 3, Llama 3.2,
-  /// Phi-4 Mini, DeepSeek R1 distill. One Q4 (GGUF) / 4-bit (MLX) per size;
-  /// legacy Qwen 1.5 / 2.5 / SmolLM removed.
+  /// Catalog refreshed Oct 2026 to the latest families only: Qwen 3.5,
+  /// Gemma 4, Bonsai (1-bit), LFM 2.5, MiniCPM 5, Ministral 3, SmolLM 3 and
+  /// Granite 4. GGUF runs on the bundled llama.cpp (fllama 5f286c9). MLX
+  /// builds are listed only for families the bundled mlx-swift-examples
+  /// 2.25.9 can load (no Qwen 3.5 / Gemma 4 / Ministral 3 there yet).
+  /// Models removed here keep working for people who downloaded them (the
+  /// download stores its spec); see LocalModelDownloadService.
   static const List<LocalModelSpec> entries = [
-    // ─── FREE SLOT (GGUF under ~1.9B) ────────────────────────────────
-    // Primary free pick: Qwen3 1.7B — strongest small general model.
+    // ─── FREE MODELS (GGUF, any device) ───
     LocalModelSpec(
-      id: 'qwen/qwen3-1.7b/Q4_K_M',
-      displayName: 'Qwen 3 1.7B',
-      description: 'Latest Qwen 3 small model. Tool calling. ~1.2 GB.',
-      hfRepo: 'lmstudio-community/Qwen3-1.7B-GGUF',
-      hfFile: 'Qwen3-1.7B-Q4_K_M.gguf',
-      sizeMb: 1223,
-      paramsB: 1.7,
+      id: 'qwen/qwen3.5-2b/Q4_K_M',
+      displayName: 'Qwen 3.5 2B',
+      description: 'Newest small Qwen. Tool calling. Best free pick. ~1.2 GB.',
+      hfRepo: 'lmstudio-community/Qwen3.5-2B-GGUF',
+      hfFile: 'Qwen3.5-2B-Q4_K_M.gguf',
+      sizeMb: 1212,
+      paramsB: 2.0,
       quantization: 'Q4_K_M',
       engine: LocalEngine.fllama,
       tier: LocalModelTier.free,
-      chatTemplate: 'qwen2',
+      chatTemplate: 'auto',
       supportsToolCalls: true,
       minRamGb: 3.0,
       isFreeSlot: true,
-      draftModelId: 'qwen/qwen3-0.6b/Q4_K_M',
     ),
     LocalModelSpec(
-      id: 'meta-llama/llama-3.2-1b-instruct/Q4_K_M',
-      displayName: 'Llama 3.2 1B Instruct',
-      description: 'Meta\'s small Llama — fast on every phone. Tool calling.',
-      hfRepo: 'bartowski/Llama-3.2-1B-Instruct-GGUF',
-      hfFile: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
-      sizeMb: 808,
+      id: 'qwen/qwen3.5-0.8b/Q4_K_M',
+      displayName: 'Qwen 3.5 0.8B',
+      description: 'Tiny Qwen 3.5 for phones with little memory. ~0.5 GB.',
+      hfRepo: 'lmstudio-community/Qwen3.5-0.8B-GGUF',
+      hfFile: 'Qwen3.5-0.8B-Q4_K_M.gguf',
+      sizeMb: 503,
+      paramsB: 0.8,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.free,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 2.0,
+      isFreeSlot: true,
+    ),
+    LocalModelSpec(
+      id: 'google/gemma-4-e2b-it/Q4_K_M',
+      displayName: 'Gemma 4 E2B',
+      description: 'Google Gemma 4, phone size. Strong all-rounder. ~3 GB.',
+      hfRepo: 'unsloth/gemma-4-E2B-it-GGUF',
+      hfFile: 'gemma-4-E2B-it-Q4_K_M.gguf',
+      sizeMb: 2963,
+      paramsB: 2.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.free,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 5.0,
+      isFreeSlot: true,
+    ),
+    LocalModelSpec(
+      id: 'prism-ml/bonsai-1.7b/Q1_0',
+      displayName: 'Bonsai 1.7B (1-bit)',
+      description: '1-bit model from PrismML. Tiny download, fast on any phone. ~240 MB.',
+      hfRepo: 'prism-ml/Bonsai-1.7B-gguf',
+      hfFile: 'Bonsai-1.7B-Q1_0.gguf',
+      sizeMb: 237,
+      paramsB: 1.7,
+      quantization: 'Q1_0',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.free,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 2.0,
+      isFreeSlot: true,
+    ),
+    LocalModelSpec(
+      id: 'liquidai/lfm2.5-1.2b-instruct/Q4_K_M',
+      displayName: 'LFM 2.5 1.2B',
+      description: 'Liquid AI. Very fast for its size. Tool calling. ~0.7 GB.',
+      hfRepo: 'LiquidAI/LFM2.5-1.2B-Instruct-GGUF',
+      hfFile: 'LFM2.5-1.2B-Instruct-Q4_K_M.gguf',
+      sizeMb: 697,
+      paramsB: 1.2,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.free,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 2.0,
+      isFreeSlot: true,
+    ),
+    LocalModelSpec(
+      id: 'openbmb/minicpm5-1b/Q4_K_M',
+      displayName: 'MiniCPM 5 1B',
+      description: 'OpenBMB small model. Fast on phones. ~0.7 GB.',
+      hfRepo: 'openbmb/MiniCPM5-1B-GGUF',
+      hfFile: 'MiniCPM5-1B-Q4_K_M.gguf',
+      sizeMb: 656,
       paramsB: 1.0,
       quantization: 'Q4_K_M',
       engine: LocalEngine.fllama,
       tier: LocalModelTier.free,
-      chatTemplate: 'llama3',
+      chatTemplate: 'auto',
       supportsToolCalls: true,
-      minRamGb: 3.0,
-      isFreeSlot: true,
-      draftModelId: 'meta-llama/llama-3.2-1b-instruct/Q4_K_M',
-    ),
-    LocalModelSpec(
-      id: 'google/gemma-3-1b-it/Q4_K_M',
-      displayName: 'Gemma 3 1B Instruct',
-      description: 'Tiny Google Gemma 3 — great on phones under 6 GB RAM.',
-      hfRepo: 'lmstudio-community/gemma-3-1b-it-GGUF',
-      hfFile: 'gemma-3-1b-it-Q4_K_M.gguf',
-      sizeMb: 750,
-      paramsB: 1.0,
-      quantization: 'Q4_K_M',
-      engine: LocalEngine.fllama,
-      tier: LocalModelTier.free,
-      chatTemplate: 'gemma',
-      supportsToolCalls: false,
-      minRamGb: 3.0,
-      isFreeSlot: true,
-    ),
-    LocalModelSpec(
-      id: 'deepseek/deepseek-r1-distill-qwen-1.5b/Q4_K_M',
-      displayName: 'DeepSeek R1 Distill 1.5B',
-      description: 'Reasoning-tuned distill. Strong math and code.',
-      hfRepo: 'bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF',
-      hfFile: 'DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
-      sizeMb: 1065,
-      paramsB: 1.5,
-      quantization: 'Q4_K_M',
-      engine: LocalEngine.fllama,
-      tier: LocalModelTier.free,
-      chatTemplate: 'qwen2',
-      supportsToolCalls: false,
-      minRamGb: 3.0,
+      minRamGb: 2.0,
       isFreeSlot: true,
     ),
 
-    // ─── MLX (Apple Silicon — preferred on iOS) ──────────────────────
-
-    // -- Qwen 3 --
+    // ─── QWEN 3.5 (GGUF) ───
     LocalModelSpec(
-      id: 'mlx-community/qwen3-1.7b-4bit/mlx',
-      displayName: 'Qwen 3 1.7B (MLX)',
-      description: 'Latest Qwen 3, MLX 4-bit. Tool calling. ~1 GB.',
-      hfRepo: 'mlx-community/Qwen3-1.7B-4bit',
-      hfFile: null,
-      sizeMb: 1100,
-      paramsB: 1.7,
-      quantization: '',
-      engine: LocalEngine.mlx,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
-      supportsToolCalls: true,
-      minRamGb: 3.0,
-      draftModelId: 'mlx-community/qwen3-0.6b-4bit/mlx',
-    ),
-    LocalModelSpec(
-      id: 'mlx-community/qwen3-4b-instruct-2507-4bit/mlx',
-      displayName: 'Qwen 3 4B Instruct 2507 (MLX)',
-      description: 'July 2025 Instruct refresh — best 4B balance on 8 GB.',
-      hfRepo: 'mlx-community/Qwen3-4B-Instruct-2507-4bit',
-      hfFile: null,
-      sizeMb: 2400,
+      id: 'qwen/qwen3.5-4b/Q4_K_M',
+      displayName: 'Qwen 3.5 4B',
+      description: 'Qwen 3.5 mid size. Tool calling and images. ~3.2 GB.',
+      hfRepo: 'lmstudio-community/Qwen3.5-4B-GGUF',
+      hfFile: 'Qwen3.5-4B-Q4_K_M.gguf',
+      mmprojHfFile: 'mmproj-Qwen3.5-4B-BF16.gguf',
+      sizeMb: 3226,
       paramsB: 4.0,
-      quantization: '',
-      engine: LocalEngine.mlx,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
       tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
+      chatTemplate: 'auto',
       supportsToolCalls: true,
+      supportsVision: true,
       minRamGb: 6.0,
-      draftModelId: 'mlx-community/qwen3-0.6b-4bit/mlx',
     ),
     LocalModelSpec(
-      id: 'mlx-community/qwen3-8b-4bit/mlx',
-      displayName: 'Qwen 3 8B (MLX)',
-      description: 'Frontier quality. Requires 12 GB RAM (Pro iPhone / M-series).',
-      hfRepo: 'mlx-community/Qwen3-8B-4bit',
-      hfFile: null,
-      sizeMb: 4700,
-      paramsB: 8.0,
-      quantization: '',
-      engine: LocalEngine.mlx,
+      id: 'qwen/qwen3.5-9b/Q4_K_M',
+      displayName: 'Qwen 3.5 9B',
+      description: 'Qwen 3.5 large. Tool calling and images. ~6.1 GB.',
+      hfRepo: 'lmstudio-community/Qwen3.5-9B-GGUF',
+      hfFile: 'Qwen3.5-9B-Q4_K_M.gguf',
+      mmprojHfFile: 'mmproj-Qwen3.5-9B-BF16.gguf',
+      sizeMb: 6245,
+      paramsB: 9.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
       tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      supportsVision: true,
+      minRamGb: 9.0,
+    ),
+
+    // ─── GEMMA 4 (GGUF) ───
+    LocalModelSpec(
+      id: 'google/gemma-4-e4b-it/Q4_K_M',
+      displayName: 'Gemma 4 E4B',
+      description: 'Google Gemma 4, larger phone size. Tool calling and images. ~5.6 GB.',
+      hfRepo: 'unsloth/gemma-4-E4B-it-GGUF',
+      hfFile: 'gemma-4-E4B-it-Q4_K_M.gguf',
+      mmprojHfFile: 'mmproj-F16.gguf',
+      sizeMb: 5691,
+      paramsB: 4.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      supportsVision: true,
+      minRamGb: 9.0,
+    ),
+    LocalModelSpec(
+      id: 'google/gemma-4-12b-it/Q4_K_M',
+      displayName: 'Gemma 4 12B',
+      description: 'Google Gemma 4 12B. Text only here. ~6.6 GB.',
+      hfRepo: 'unsloth/gemma-4-12B-it-GGUF',
+      hfFile: 'gemma-4-12b-it-Q4_K_M.gguf',
+      sizeMb: 6792,
+      paramsB: 12.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
       supportsToolCalls: true,
       minRamGb: 10.0,
     ),
 
-    // -- Llama 3.2 --
+    // ─── BONSAI 1-BIT (GGUF) ───
     LocalModelSpec(
-      id: 'mlx-community/llama-3.2-1b-instruct-4bit/mlx',
-      displayName: 'Llama 3.2 1B Instruct (MLX)',
-      description: 'Tiny Meta Llama on MLX — also used as a draft model.',
-      hfRepo: 'mlx-community/Llama-3.2-1B-Instruct-4bit',
-      hfFile: null,
-      sizeMb: 700,
-      paramsB: 1.0,
-      quantization: '',
-      engine: LocalEngine.mlx,
+      id: 'prism-ml/bonsai-4b/Q1_0',
+      displayName: 'Bonsai 4B (1-bit)',
+      description: '4B model in 1-bit. ~550 MB.',
+      hfRepo: 'prism-ml/Bonsai-4B-gguf',
+      hfFile: 'Bonsai-4B-Q1_0.gguf',
+      sizeMb: 546,
+      paramsB: 4.0,
+      quantization: 'Q1_0',
+      engine: LocalEngine.fllama,
       tier: LocalModelTier.pro,
-      chatTemplate: 'llama3',
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 2.0,
+    ),
+    LocalModelSpec(
+      id: 'prism-ml/bonsai-8b/Q1_0',
+      displayName: 'Bonsai 8B (1-bit)',
+      description: '8B model in 1-bit. Big model, small download. ~1.1 GB.',
+      hfRepo: 'prism-ml/Bonsai-8B-gguf',
+      hfFile: 'Bonsai-8B-Q1_0.gguf',
+      sizeMb: 1105,
+      paramsB: 8.0,
+      quantization: 'Q1_0',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 3.0,
+    ),
+
+    // ─── LFM 2.5 (GGUF) ───
+    LocalModelSpec(
+      id: 'liquidai/lfm2.5-1.2b-thinking/Q4_K_M',
+      displayName: 'LFM 2.5 1.2B Thinking',
+      description: 'Liquid AI reasoning model. Thinks before answering. ~0.7 GB.',
+      hfRepo: 'LiquidAI/LFM2.5-1.2B-Thinking-GGUF',
+      hfFile: 'LFM2.5-1.2B-Thinking-Q4_K_M.gguf',
+      sizeMb: 697,
+      paramsB: 1.2,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 2.0,
+    ),
+    LocalModelSpec(
+      id: 'liquidai/lfm2.5-2.6b/Q4_K_M',
+      displayName: 'LFM 2.5 2.6B',
+      description: 'Liquid AI mid size. Tool calling. ~1.6 GB.',
+      hfRepo: 'LiquidAI/LFM2.5-2.6B-GGUF',
+      hfFile: 'LFM2.5-2.6B-Q4_K_M.gguf',
+      sizeMb: 1597,
+      paramsB: 2.6,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 4.0,
+    ),
+    LocalModelSpec(
+      id: 'liquidai/lfm2.5-8b-a1b/Q4_K_M',
+      displayName: 'LFM 2.5 8B-A1B',
+      description: 'Liquid AI mixture of experts: 8B knowledge at 1B speed. ~4.8 GB.',
+      hfRepo: 'LiquidAI/LFM2.5-8B-A1B-GGUF',
+      hfFile: 'LFM2.5-8B-A1B-Q4_K_M.gguf',
+      sizeMb: 4917,
+      paramsB: 8.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 8.0,
+    ),
+    LocalModelSpec(
+      id: 'liquidai/lfm2.5-vl-1.6b/Q4_K_M',
+      displayName: 'LFM 2.5 VL 1.6B',
+      description: 'Liquid AI vision model. Understands photos. ~1.2 GB.',
+      hfRepo: 'LiquidAI/LFM2.5-VL-1.6B-GGUF',
+      hfFile: 'LFM2.5-VL-1.6B-Q4_K_M.gguf',
+      mmprojHfFile: 'mmproj-LFM2.5-VL-1.6b-Q8_0.gguf',
+      sizeMb: 1253,
+      paramsB: 1.6,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: false,
+      supportsVision: true,
+      minRamGb: 3.0,
+    ),
+
+    // ─── MINISTRAL 3 (GGUF) ───
+    LocalModelSpec(
+      id: 'mistralai/ministral-3-3b-instruct-2512/Q4_K_M',
+      displayName: 'Ministral 3 3B',
+      description: 'Mistral small model. Tool calling and images. ~2.8 GB.',
+      hfRepo: 'mistralai/Ministral-3-3B-Instruct-2512-GGUF',
+      hfFile: 'Ministral-3-3B-Instruct-2512-Q4_K_M.gguf',
+      mmprojHfFile: 'Ministral-3-3B-Instruct-2512-BF16-mmproj.gguf',
+      sizeMb: 2851,
+      paramsB: 3.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      supportsVision: true,
+      minRamGb: 5.0,
+    ),
+    LocalModelSpec(
+      id: 'mistralai/ministral-3-8b-instruct-2512/Q4_K_M',
+      displayName: 'Ministral 3 8B',
+      description: 'Mistral 8B. Tool calling and images. ~5.6 GB.',
+      hfRepo: 'mistralai/Ministral-3-8B-Instruct-2512-GGUF',
+      hfFile: 'Ministral-3-8B-Instruct-2512-Q4_K_M.gguf',
+      mmprojHfFile: 'Ministral-3-8B-Instruct-2512-BF16-mmproj.gguf',
+      sizeMb: 5777,
+      paramsB: 8.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      supportsVision: true,
+      minRamGb: 9.0,
+    ),
+    LocalModelSpec(
+      id: 'mistralai/ministral-3-14b-instruct-2512/Q4_K_M',
+      displayName: 'Ministral 3 14B',
+      description: 'Mistral 14B for Macs and big phones. Tool calling and images. ~8.5 GB.',
+      hfRepo: 'mistralai/Ministral-3-14B-Instruct-2512-GGUF',
+      hfFile: 'Ministral-3-14B-Instruct-2512-Q4_K_M.gguf',
+      mmprojHfFile: 'Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf',
+      sizeMb: 8697,
+      paramsB: 14.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      supportsVision: true,
+      minRamGb: 12.0,
+    ),
+
+    // ─── SMOLLM 3 / GRANITE 4 (GGUF) ───
+    LocalModelSpec(
+      id: 'huggingfacetb/smollm3-3b/Q4_K_M',
+      displayName: 'SmolLM 3 3B',
+      description: 'Hugging Face open model. Tool calling. ~1.8 GB.',
+      hfRepo: 'ggml-org/SmolLM3-3B-GGUF',
+      hfFile: 'SmolLM3-Q4_K_M.gguf',
+      sizeMb: 1827,
+      paramsB: 3.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 4.0,
+    ),
+    LocalModelSpec(
+      id: 'ibm-granite/granite-4.0-h-1b/Q4_K_M',
+      displayName: 'Granite 4.0 H 1B',
+      description: 'IBM hybrid model. Long chats use little memory. ~0.9 GB.',
+      hfRepo: 'ibm-granite/granite-4.0-h-1b-GGUF',
+      hfFile: 'granite-4.0-h-1b-Q4_K_M.gguf',
+      sizeMb: 859,
+      paramsB: 1.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
       supportsToolCalls: true,
       minRamGb: 3.0,
     ),
     LocalModelSpec(
-      id: 'mlx-community/llama-3.2-3b-instruct-4bit/mlx',
-      displayName: 'Llama 3.2 3B Instruct (MLX)',
-      description: 'Meta Llama 3.2, MLX 4-bit. Tool calling.',
-      hfRepo: 'mlx-community/Llama-3.2-3B-Instruct-4bit',
+      id: 'ibm-granite/granite-4.2-3b/Q4_K_M',
+      displayName: 'Granite 4.2 3B',
+      description: 'IBM Granite, latest. Tool calling. ~2.1 GB.',
+      hfRepo: 'ibm-granite/granite-4.2-3b-GGUF',
+      hfFile: 'granite-4.2-3b-Q4_K_M.gguf',
+      sizeMb: 2140,
+      paramsB: 3.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 4.0,
+    ),
+    LocalModelSpec(
+      id: 'ibm-granite/granite-4.2-8b/Q4_K_M',
+      displayName: 'Granite 4.2 8B',
+      description: 'IBM Granite 8B. Tool calling. ~5 GB.',
+      hfRepo: 'ibm-granite/granite-4.2-8b-GGUF',
+      hfFile: 'granite-4.2-8b-Q4_K_M.gguf',
+      sizeMb: 5100,
+      paramsB: 8.0,
+      quantization: 'Q4_K_M',
+      engine: LocalEngine.fllama,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 8.0,
+    ),
+
+    // ─── MLX (Apple Silicon; only families the bundled MLX supports) ───
+    LocalModelSpec(
+      id: 'mlx-community/lfm2.5-1.2b-instruct-4bit/mlx',
+      displayName: 'LFM 2.5 1.2B (MLX)',
+      description: 'Liquid AI, MLX build for Apple chips.',
+      hfRepo: 'mlx-community/LFM2.5-1.2B-Instruct-4bit',
       hfFile: null,
-      sizeMb: 1900,
+      sizeMb: 633,
+      paramsB: 1.2,
+      quantization: '',
+      engine: LocalEngine.mlx,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 2.0,
+    ),
+    LocalModelSpec(
+      id: 'mlx-community/lfm2.5-2.6b-4bit/mlx',
+      displayName: 'LFM 2.5 2.6B (MLX)',
+      description: 'Liquid AI mid size, MLX.',
+      hfRepo: 'mlx-community/LFM2.5-2.6B-4bit',
+      hfFile: null,
+      sizeMb: 1464,
+      paramsB: 2.6,
+      quantization: '',
+      engine: LocalEngine.mlx,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 3.0,
+    ),
+    LocalModelSpec(
+      id: 'mlx-community/lfm2.5-8b-a1b-4bit/mlx',
+      displayName: 'LFM 2.5 8B-A1B (MLX)',
+      description: 'Liquid AI mixture of experts, MLX.',
+      hfRepo: 'mlx-community/LFM2.5-8B-A1B-MLX-4bit',
+      hfFile: null,
+      sizeMb: 4561,
+      paramsB: 8.0,
+      quantization: '',
+      engine: LocalEngine.mlx,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 7.0,
+    ),
+    LocalModelSpec(
+      id: 'mlx-community/smollm3-3b-4bit/mlx',
+      displayName: 'SmolLM 3 3B (MLX)',
+      description: 'Hugging Face SmolLM 3, MLX.',
+      hfRepo: 'mlx-community/SmolLM3-3B-4bit',
+      hfFile: null,
+      sizeMb: 1666,
       paramsB: 3.0,
       quantization: '',
       engine: LocalEngine.mlx,
       tier: LocalModelTier.pro,
-      chatTemplate: 'llama3',
+      chatTemplate: 'auto',
       supportsToolCalls: true,
-      minRamGb: 6.0,
-      draftModelId: 'mlx-community/llama-3.2-1b-instruct-4bit/mlx',
+      minRamGb: 3.0,
     ),
-
-    // -- Gemma 3 --
     LocalModelSpec(
-      id: 'mlx-community/gemma-3-1b-it-4bit/mlx',
-      displayName: 'Gemma 3 1B Instruct (MLX)',
-      description: 'Google Gemma 3 — tiny, strong reasoning. MLX 4-bit.',
-      hfRepo: 'mlx-community/gemma-3-1b-it-4bit',
+      id: 'mlx-community/granite-4.0-h-1b-4bit/mlx',
+      displayName: 'Granite 4.0 H 1B (MLX)',
+      description: 'IBM hybrid model, MLX.',
+      hfRepo: 'mlx-community/granite-4.0-h-1b-4bit',
       hfFile: null,
-      sizeMb: 700,
+      sizeMb: 795,
       paramsB: 1.0,
       quantization: '',
       engine: LocalEngine.mlx,
       tier: LocalModelTier.pro,
-      chatTemplate: 'gemma',
-      supportsToolCalls: false,
-      minRamGb: 3.0,
-    ),
-    LocalModelSpec(
-      id: 'mlx-community/gemma-3-4b-it-4bit/mlx',
-      displayName: 'Gemma 3 4B Instruct (MLX)',
-      description: 'Google Gemma 3 4B with vision. MLX 4-bit.',
-      hfRepo: 'mlx-community/gemma-3-4b-it-4bit',
-      hfFile: null,
-      sizeMb: 2700,
-      paramsB: 4.0,
-      quantization: '',
-      engine: LocalEngine.mlx,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'gemma',
-      supportsToolCalls: false,
-      supportsVision: true,
-      minRamGb: 6.0,
-    ),
-    LocalModelSpec(
-      id: 'mlx-community/gemma-3-12b-it-4bit/mlx',
-      displayName: 'Gemma 3 12B Instruct (MLX)',
-      description: 'Premier Gemma 3 size. 12 GB RAM recommended.',
-      hfRepo: 'mlx-community/gemma-3-12b-it-4bit',
-      hfFile: null,
-      sizeMb: 7100,
-      paramsB: 12.0,
-      quantization: '4-bit',
-      engine: LocalEngine.mlx,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'gemma',
-      supportsToolCalls: false,
-      supportsVision: true,
-      minRamGb: 12.0,
-    ),
-    LocalModelSpec(
-      id: 'mlx-community/qwen3-14b-4bit/mlx',
-      displayName: 'Qwen 3 14B (MLX)',
-      description: 'Strong desktop quality. Fits ~16 GB unified memory.',
-      hfRepo: 'mlx-community/Qwen3-14B-4bit',
-      hfFile: null,
-      sizeMb: 8200,
-      paramsB: 14.0,
-      quantization: '4-bit',
-      engine: LocalEngine.mlx,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
+      chatTemplate: 'auto',
       supportsToolCalls: true,
-      minRamGb: 16.0,
-    ),
-    LocalModelSpec(
-      id: 'mlx-community/gemma-3-27b-it-4bit/mlx',
-      displayName: 'Gemma 3 27B Instruct (MLX)',
-      description: 'Large Gemma 3. Aims at ~70% of 36 GB unified memory.',
-      hfRepo: 'mlx-community/gemma-3-27b-it-4bit',
-      hfFile: null,
-      sizeMb: 15500,
-      paramsB: 27.0,
-      quantization: '4-bit',
-      engine: LocalEngine.mlx,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'gemma',
-      supportsToolCalls: false,
-      supportsVision: true,
-      minRamGb: 24.0,
-    ),
-    LocalModelSpec(
-      id: 'mlx-community/qwen3-32b-4bit/mlx',
-      displayName: 'Qwen 3 32B (MLX)',
-      description: 'Top desktop pick on 32 GB+ Macs. 4-bit MLX.',
-      hfRepo: 'mlx-community/Qwen3-32B-4bit',
-      hfFile: null,
-      sizeMb: 18000,
-      paramsB: 32.0,
-      quantization: '4-bit',
-      engine: LocalEngine.mlx,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
-      supportsToolCalls: true,
-      minRamGb: 32.0,
-    ),
-
-    // -- Phi-4 --
-    LocalModelSpec(
-      id: 'mlx-community/phi-4-mini-instruct-4bit/mlx',
-      displayName: 'Phi-4 Mini Instruct (MLX)',
-      description: 'Microsoft Phi-4 Mini — strong reasoning at ~3.8B.',
-      hfRepo: 'mlx-community/Phi-4-mini-instruct-4bit',
-      hfFile: null,
-      sizeMb: 2300,
-      paramsB: 3.8,
-      quantization: '',
-      engine: LocalEngine.mlx,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'phi3',
-      supportsToolCalls: true,
-      minRamGb: 6.0,
-    ),
-
-    // -- DeepSeek R1 Distill --
-    LocalModelSpec(
-      id: 'mlx-community/deepseek-r1-distill-qwen-1.5b-4bit/mlx',
-      displayName: 'DeepSeek R1 Distill 1.5B (MLX)',
-      description: 'Reasoning-tuned distill of R1 onto Qwen 2.5 1.5B.',
-      hfRepo: 'mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit',
-      hfFile: null,
-      sizeMb: 1000,
-      paramsB: 1.5,
-      quantization: '',
-      engine: LocalEngine.mlx,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
-      supportsToolCalls: false,
-      minRamGb: 3.0,
-    ),
-
-    // -- MLX draft --
-    LocalModelSpec(
-      id: 'mlx-community/qwen3-0.6b-4bit/mlx',
-      displayName: 'Qwen 3 0.6B (MLX draft)',
-      description: 'Tiny draft for Qwen 3 speculative decoding.',
-      hfRepo: 'mlx-community/Qwen3-0.6B-4bit',
-      hfFile: null,
-      sizeMb: 420,
-      paramsB: 0.6,
-      quantization: '',
-      engine: LocalEngine.mlx,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
-      supportsToolCalls: false,
       minRamGb: 2.0,
     ),
-
-    // ─── GGUF (Android + devices without MLX) ────────────────────────
-
     LocalModelSpec(
-      id: 'qwen/qwen3-4b-instruct-2507/Q4_K_M',
-      displayName: 'Qwen 3 4B Instruct 2507',
-      description: 'July 2025 Instruct refresh — best general 4B pick.',
-      hfRepo: 'lmstudio-community/Qwen3-4B-Instruct-2507-GGUF',
-      hfFile: 'Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
-      sizeMb: 2500,
+      id: 'ibm-granite/granite-4.2-3b-q4-mlx/mlx',
+      displayName: 'Granite 4.2 3B (MLX)',
+      description: 'IBM Granite, official MLX build.',
+      hfRepo: 'ibm-granite/granite-4.2-3b-q4-mlx',
+      hfFile: null,
+      sizeMb: 1970,
+      paramsB: 3.0,
+      quantization: '',
+      engine: LocalEngine.mlx,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 4.0,
+    ),
+    LocalModelSpec(
+      id: 'ibm-granite/granite-4.2-8b-q4-mlx/mlx',
+      displayName: 'Granite 4.2 8B (MLX)',
+      description: 'IBM Granite 8B, official MLX build.',
+      hfRepo: 'ibm-granite/granite-4.2-8b-q4-mlx',
+      hfFile: null,
+      sizeMb: 4724,
+      paramsB: 8.0,
+      quantization: '',
+      engine: LocalEngine.mlx,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 7.0,
+    ),
+    LocalModelSpec(
+      id: 'mlx-community/minicpm5-1b-4bit/mlx',
+      displayName: 'MiniCPM 5 1B (MLX)',
+      description: 'OpenBMB small model, MLX.',
+      hfRepo: 'mlx-community/MiniCPM5-1B-4bit',
+      hfFile: null,
+      sizeMb: 589,
+      paramsB: 1.0,
+      quantization: '',
+      engine: LocalEngine.mlx,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 2.0,
+    ),
+    LocalModelSpec(
+      id: 'openbmb/minicpm5-2b-mlx/mlx',
+      displayName: 'MiniCPM 5 2B (MLX)',
+      description: 'OpenBMB 2B, official MLX build.',
+      hfRepo: 'openbmb/MiniCPM5-2B-MLX',
+      hfFile: null,
+      sizeMb: 1360,
+      paramsB: 2.0,
+      quantization: '',
+      engine: LocalEngine.mlx,
+      tier: LocalModelTier.pro,
+      chatTemplate: 'auto',
+      supportsToolCalls: true,
+      minRamGb: 3.0,
+    ),
+    LocalModelSpec(
+      id: 'prism-ml/ternary-bonsai-4b-mlx-2bit/mlx',
+      displayName: 'Ternary Bonsai 4B (MLX)',
+      description: 'PrismML ternary model, MLX 2-bit. ~1.1 GB.',
+      hfRepo: 'prism-ml/Ternary-Bonsai-4B-mlx-2bit',
+      hfFile: null,
+      sizeMb: 1090,
       paramsB: 4.0,
-      quantization: 'Q4_K_M',
-      engine: LocalEngine.fllama,
+      quantization: '',
+      engine: LocalEngine.mlx,
       tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
+      chatTemplate: 'auto',
       supportsToolCalls: true,
-      minRamGb: 6.0,
-      draftModelId: 'qwen/qwen3-0.6b/Q4_K_M',
+      minRamGb: 2.0,
     ),
     LocalModelSpec(
-      id: 'qwen/qwen3-8b/Q4_K_M',
-      displayName: 'Qwen 3 8B',
-      description: 'Frontier quality. 12 GB RAM recommended.',
-      hfRepo: 'lmstudio-community/Qwen3-8B-GGUF',
-      hfFile: 'Qwen3-8B-Q4_K_M.gguf',
-      sizeMb: 4900,
+      id: 'prism-ml/ternary-bonsai-8b-mlx-2bit/mlx',
+      displayName: 'Ternary Bonsai 8B (MLX)',
+      description: 'PrismML ternary 8B, MLX 2-bit. ~2.2 GB.',
+      hfRepo: 'prism-ml/Ternary-Bonsai-8B-mlx-2bit',
+      hfFile: null,
+      sizeMb: 2208,
       paramsB: 8.0,
-      quantization: 'Q4_K_M',
-      engine: LocalEngine.fllama,
+      quantization: '',
+      engine: LocalEngine.mlx,
       tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
+      chatTemplate: 'auto',
       supportsToolCalls: true,
-      minRamGb: 10.0,
-    ),
-    LocalModelSpec(
-      id: 'qwen/qwen3-8b/Q5_K_M',
-      displayName: 'Qwen 3 8B',
-      description: 'Higher quality GGUF quant. ~6.5 GB.',
-      hfRepo: 'lmstudio-community/Qwen3-8B-GGUF',
-      hfFile: 'Qwen3-8B-Q5_K_M.gguf',
-      sizeMb: 5600,
-      paramsB: 8.0,
-      quantization: 'Q5_K_M',
-      engine: LocalEngine.fllama,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
-      supportsToolCalls: true,
-      minRamGb: 12.0,
-    ),
-    LocalModelSpec(
-      id: 'qwen/qwen3-8b/Q8_0',
-      displayName: 'Qwen 3 8B',
-      description: 'Near-full precision GGUF. ~8.5 GB.',
-      hfRepo: 'lmstudio-community/Qwen3-8B-GGUF',
-      hfFile: 'Qwen3-8B-Q8_0.gguf',
-      sizeMb: 8500,
-      paramsB: 8.0,
-      quantization: 'Q8_0',
-      engine: LocalEngine.fllama,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
-      supportsToolCalls: true,
-      minRamGb: 16.0,
+      minRamGb: 4.0,
     ),
 
-    // ─── GGUF MoE stream (iOS device). File is ~18 GB; RAM is ~3 GB. ──
+    // ─── Hidden: MoE expert streaming (own engine, not listed) ───
     LocalModelSpec(
       id: 'qwen/qwen3-30b-a3b/Q4_K_M/stream',
       displayName: 'Qwen 3 30B-A3B (stream)',
@@ -433,86 +622,6 @@ class LocalModelCatalog {
       supportsToolCalls: true,
       minRamGb: 4.0,
     ),
-    LocalModelSpec(
-      id: 'google/gemma-3-12b-it/Q4_K_M',
-      displayName: 'Gemma 3 12B Instruct',
-      description: 'Gemma 3 12B GGUF with vision projector.',
-      hfRepo: 'lmstudio-community/gemma-3-12b-it-GGUF',
-      hfFile: 'gemma-3-12b-it-Q4_K_M.gguf',
-      mmprojHfFile: 'mmproj-model-f16.gguf',
-      sizeMb: 8500,
-      paramsB: 12.0,
-      quantization: 'Q4_K_M',
-      engine: LocalEngine.fllama,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'gemma',
-      supportsToolCalls: false,
-      supportsVision: true,
-      minRamGb: 16.0,
-    ),
-    LocalModelSpec(
-      id: 'meta-llama/llama-3.2-3b-instruct/Q4_K_M',
-      displayName: 'Llama 3.2 3B Instruct',
-      description: 'Meta Llama 3.2 3B with tool calling.',
-      hfRepo: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
-      hfFile: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
-      sizeMb: 2020,
-      paramsB: 3.0,
-      quantization: 'Q4_K_M',
-      engine: LocalEngine.fllama,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'llama3',
-      supportsToolCalls: true,
-      minRamGb: 6.0,
-      draftModelId: 'meta-llama/llama-3.2-1b-instruct/Q4_K_M',
-    ),
-    LocalModelSpec(
-      id: 'google/gemma-3-4b-it/Q4_K_M',
-      displayName: 'Gemma 3 4B Instruct',
-      description: 'Google Gemma 3 with vision — strong phone/tablet pick.',
-      hfRepo: 'lmstudio-community/gemma-3-4b-it-GGUF',
-      hfFile: 'gemma-3-4b-it-Q4_K_M.gguf',
-      mmprojHfFile: 'mmproj-model-f16.gguf',
-      sizeMb: 3650, // GGUF + mmproj (~850 MB)
-      paramsB: 4.0,
-      quantization: 'Q4_K_M',
-      engine: LocalEngine.fllama,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'gemma',
-      supportsToolCalls: false,
-      supportsVision: true,
-      minRamGb: 6.0,
-    ),
-    LocalModelSpec(
-      id: 'microsoft/phi-4-mini-instruct/Q4_K_M',
-      displayName: 'Phi-4 Mini Instruct',
-      description: 'Microsoft Phi-4 Mini — strong reasoning at 3.8B.',
-      hfRepo: 'lmstudio-community/Phi-4-mini-instruct-GGUF',
-      hfFile: 'Phi-4-mini-instruct-Q4_K_M.gguf',
-      sizeMb: 2400,
-      paramsB: 3.8,
-      quantization: 'Q4_K_M',
-      engine: LocalEngine.fllama,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'phi3',
-      supportsToolCalls: true,
-      minRamGb: 6.0,
-    ),
-    LocalModelSpec(
-      id: 'qwen/qwen3-0.6b/Q4_K_M',
-      displayName: 'Qwen 3 0.6B (draft)',
-      description: 'Tiny draft for Qwen 3 speculative decoding.',
-      hfRepo: 'lmstudio-community/Qwen3-0.6B-GGUF',
-      hfFile: 'Qwen3-0.6B-Q4_K_M.gguf',
-      sizeMb: 470,
-      paramsB: 0.6,
-      quantization: 'Q4_K_M',
-      engine: LocalEngine.fllama,
-      tier: LocalModelTier.pro,
-      chatTemplate: 'qwen2',
-      supportsToolCalls: false,
-      minRamGb: 2.0,
-    ),
   ];
 
   /// The single curated model that any user can download on the free tier.
@@ -528,28 +637,118 @@ class LocalModelCatalog {
     return null;
   }
 
+  /// Catalog models retired in the Oct 2026 refresh. Downloads people
+  /// already finished keep working and are listed under "Older models".
+  static const Set<String> retiredIds = {
+    'qwen/qwen3-1.7b/Q4_K_M',
+    'meta-llama/llama-3.2-1b-instruct/Q4_K_M',
+    'google/gemma-3-1b-it/Q4_K_M',
+    'deepseek/deepseek-r1-distill-qwen-1.5b/Q4_K_M',
+    'mlx-community/qwen3-1.7b-4bit/mlx',
+    'mlx-community/qwen3-4b-instruct-2507-4bit/mlx',
+    'mlx-community/qwen3-8b-4bit/mlx',
+    'mlx-community/llama-3.2-1b-instruct-4bit/mlx',
+    'mlx-community/llama-3.2-3b-instruct-4bit/mlx',
+    'mlx-community/gemma-3-1b-it-4bit/mlx',
+    'mlx-community/gemma-3-4b-it-4bit/mlx',
+    'mlx-community/gemma-3-12b-it-4bit/mlx',
+    'mlx-community/qwen3-14b-4bit/mlx',
+    'mlx-community/gemma-3-27b-it-4bit/mlx',
+    'mlx-community/qwen3-32b-4bit/mlx',
+    'mlx-community/phi-4-mini-instruct-4bit/mlx',
+    'mlx-community/deepseek-r1-distill-qwen-1.5b-4bit/mlx',
+    'mlx-community/qwen3-0.6b-4bit/mlx',
+    'qwen/qwen3-4b-instruct-2507/Q4_K_M',
+    'qwen/qwen3-8b/Q4_K_M',
+    'qwen/qwen3-8b/Q5_K_M',
+    'google/gemma-3-12b-it/Q4_K_M',
+    'meta-llama/llama-3.2-3b-instruct/Q4_K_M',
+    'google/gemma-3-4b-it/Q4_K_M',
+    'microsoft/phi-4-mini-instruct/Q4_K_M',
+    'qwen/qwen3-0.6b/Q4_K_M',
+  };
+
+  /// Family card for models downloaded before they left the catalog.
+  static const olderModelsFamily = 'Older models';
+
   /// Display order for brand grouping in the on-device browser.
   static const List<String> familyOrder = [
     'Qwen',
     'Google',
+    'Liquid AI',
+    'Mistral',
+    'IBM',
+    'Hugging Face',
+    'OpenBMB',
+    'PrismML',
     'Meta',
     'DeepSeek',
     'Microsoft',
-    'Hugging Face',
+    olderModelsFamily,
+    'Imported',
     'Other',
   ];
 
-  /// Brand bucket for expand/collapse grouping.
+  /// Brand bucket for the family cards.
   static String familyGroup(LocalModelSpec spec) {
+    if (spec.isImported) return 'Imported';
+    if (retiredIds.contains(spec.id)) return olderModelsFamily;
     final s = '${spec.id} ${spec.displayName} ${spec.hfRepo}'.toLowerCase();
+    if (s.contains('bonsai') || s.contains('prism')) return 'PrismML';
+    if (s.contains('minicpm') || s.contains('openbmb')) return 'OpenBMB';
+    if (s.contains('lfm') || s.contains('liquid')) return 'Liquid AI';
+    if (s.contains('granite') || s.contains('ibm-')) return 'IBM';
+    if (s.contains('mistral')) return 'Mistral';
     if (s.contains('qwen')) return 'Qwen';
     if (s.contains('gemma') || s.contains('google/')) return 'Google';
+    if (s.contains('smol')) return 'Hugging Face';
     if (s.contains('llama') || s.contains('meta-llama')) return 'Meta';
     if (s.contains('deepseek')) return 'DeepSeek';
     if (s.contains('phi')) return 'Microsoft';
-    if (s.contains('smol')) return 'Hugging Face';
     return 'Other';
   }
+
+  /// Logo file in assets/icons/brands for a family card (null: letter badge).
+  static String? familyLogo(String family) => const {
+        'Qwen': 'qwen-color.svg',
+        'Google': 'google-color.svg',
+        'OpenBMB': 'openbmb.png',
+        'PrismML': 'prismml.png',
+        'Liquid AI': 'liquid.svg',
+        'Mistral': 'mistral-color.svg',
+        'IBM': 'ibm.svg',
+        'Hugging Face': 'huggingface-color.svg',
+        'Meta': 'meta-color.svg',
+        'DeepSeek': 'deepseek-color.svg',
+        'Microsoft': 'microsoft-color.svg',
+        'Apple': 'apple.svg',
+      }[family];
+
+  /// Company behind a family, shown under the model name on its card.
+  static String familyCompany(String family) => const {
+        'Qwen': 'Alibaba',
+        'Google': 'Google',
+        'Liquid AI': 'Liquid AI',
+        'Mistral': 'Mistral AI',
+        'IBM': 'IBM',
+        'Hugging Face': 'Hugging Face',
+        'OpenBMB': 'OpenBMB',
+        'PrismML': 'PrismML',
+      }[family] ??
+      '';
+
+  /// Model line(s) shown as a family card's title, e.g. "Gemma 4".
+  static String familyLines(String family) => const {
+        'Qwen': 'Qwen 3.5',
+        'Google': 'Gemma 4',
+        'Liquid AI': 'LFM 2.5',
+        'Mistral': 'Ministral 3',
+        'IBM': 'Granite 4',
+        'Hugging Face': 'SmolLM 3',
+        'OpenBMB': 'MiniCPM',
+        'PrismML': 'Bonsai',
+      }[family] ??
+      '';
 
   /// One row in the desktop browser: family + size, with quants nested under it.
   static String modelLine(LocalModelSpec spec) {
@@ -595,9 +794,10 @@ class LocalModelCatalog {
     if (fit == ModelFit.tight) return -50;
 
     var score = 0;
-    // Prefer the engine that matches the platform.
+    // MLX is only a tiebreaker on Apple chips: the strongest current
+    // families (Qwen 3.5, Gemma 4, Ministral 3) are GGUF-only in this build.
     if (cap.supportsMlx && e.engine == LocalEngine.mlx) {
-      score += 120;
+      score += 15;
     } else if (!cap.supportsMlx && e.engine == LocalEngine.fllama) {
       score += 80;
     }
@@ -606,22 +806,35 @@ class LocalModelCatalog {
     if (e.supportsToolCalls) score += 18;
     if (e.supportsVision) score += 12;
 
-    // Prefer modern families / Instruct-2507 refresh.
+    // Prefer the strongest current families.
     final id = e.id.toLowerCase();
-    if (id.contains('instruct-2507') || id.contains('2507')) score += 50;
-    if (id.contains('qwen3')) score += 40;
-    if (id.contains('gemma-3')) score += 32;
-    if (id.contains('phi-4')) score += 28;
-    if (id.contains('llama-3.2') || id.contains('llama-3.3')) score += 22;
-    if (id.contains('deepseek-r1')) score += 20;
+    if (id.contains('qwen3.5')) score += 60;
+    if (id.contains('gemma-4')) score += 52;
+    if (id.contains('ministral-3')) score += 34;
+    if (id.contains('lfm2.5')) score += 30;
+    if (id.contains('granite-4')) score += 28;
+    if (id.contains('smollm3')) score += 26;
+    if (id.contains('minicpm5')) score += 24;
+    if (id.contains('bonsai')) score += 10;
 
-    // Prefer the largest model that still fits comfortably (sweet spot).
-    score += (e.paramsB * 12).round();
+    // Bigger helps, but with diminishing returns, so a stronger family
+    // beats a merely larger one (Qwen 3.5 4B over Granite 4.2 8B).
+    score += (math.sqrt(qualityParams(e)) * 30).round();
 
     // Mild preference for free-slot / easy first download on low RAM.
     if (e.isFreeSlot && cap.ramGb < 5) score += 15;
 
     return score;
+  }
+
+  /// Parameter count adjusted for answer quality: 1-bit and ternary models
+  /// and small-active mixtures of experts answer like smaller dense models.
+  static double qualityParams(LocalModelSpec e) {
+    final id = e.id.toLowerCase();
+    if (id.contains('ternary-bonsai')) return e.paramsB * 0.4;
+    if (id.contains('bonsai')) return e.paramsB * 0.35;
+    if (id.contains('-a1b')) return 3.0;
+    return e.paramsB;
   }
 
   /// Top models that should run well on this device (best first).
@@ -638,12 +851,9 @@ class LocalModelCatalog {
   }
 
   /// Single best pick for the device banner.
-  static LocalModelSpec? bestFor(DeviceCapability cap) {
-    if (cap.ramGb >= 12) {
-      return recommendedForVram(cap) ?? _bestByScore(cap);
-    }
-    return _bestByScore(cap);
-  }
+  /// Best quality that runs comfortably, by [fitScore]. (The Mac browser
+  /// uses [recommendedForVram] instead: the largest model that fits.)
+  static LocalModelSpec? bestFor(DeviceCapability cap) => _bestByScore(cap);
 
   static LocalModelSpec? _bestByScore(DeviceCapability cap) {
     final list = recommendationsFor(cap, limit: 1);
@@ -666,6 +876,9 @@ class LocalModelCatalog {
       if (isPhoneClass(e) && cap.ramGb >= 8) continue;
       final runtime = e.estimatedRuntimeMb;
       if (runtime > budgetMb) continue;
+      if (DeviceCapabilityService.instance.verdict(e, cap) != ModelFit.runs) {
+        continue;
+      }
       final mlxBoost = cap.supportsMlx && e.engine == LocalEngine.mlx;
       final pickIsMlx = pick != null &&
           cap.supportsMlx &&
@@ -690,58 +903,37 @@ class LocalModelCatalog {
     DeviceCapability cap, {
     bool freeTierOnly = false,
   }) {
-    final preferredEngine =
-        cap.supportsMlx ? LocalEngine.mlx : LocalEngine.fllama;
     bool eligible(LocalModelSpec e) {
       if (isDraft(e)) return false;
+      if (!isListed(e)) return false;
       if (freeTierOnly && !e.isFreeSlot) return false;
       return fitScore(e, cap) > 0;
     }
 
-    var candidates = entries.where((e) {
-      if (!eligible(e)) return false;
-      if (e.engine != preferredEngine) return false;
-      return true;
-    }).toList()
-      ..sort((a, b) => a.paramsB.compareTo(b.paramsB));
-
-    // Fall back to any fitting engine if the preferred one is empty.
-    if (candidates.isEmpty) {
-      candidates = entries.where(eligible).toList()
-        ..sort((a, b) => a.paramsB.compareTo(b.paramsB));
-    }
-    if (candidates.isEmpty) return null;
-
-    final faster = candidates.first;
-    LocalModelSpec best = candidates.last;
-    for (var i = candidates.length - 1; i >= 0; i--) {
-      final e = candidates[i];
-      if (DeviceCapabilityService.instance.verdict(e, cap) == ModelFit.runs) {
-        best = e;
-        break;
+    // One build per model (MLX on Apple chips when both exist), then the
+    // strongest few by score, ordered small → large for Faster → Best.
+    final byLine = <String, LocalModelSpec>{};
+    for (final e in entries.where(eligible)) {
+      final line = modelLine(e);
+      final prev = byLine[line];
+      if (prev == null || fitScore(e, cap) > fitScore(prev, cap)) {
+        byLine[line] = e;
       }
     }
+    final ranked = byLine.values.toList()
+      ..sort((a, b) => fitScore(b, cap).compareTo(fitScore(a, cap)));
+    if (ranked.isEmpty) return null;
 
-    // Prefer a mid-size (~3–4B) when available; else geometric mid of the range.
-    final targetParams = (faster.paramsB + best.paramsB) / 2;
-    const sweetSpot = 3.5;
-    LocalModelSpec balanced = faster;
-    var bestDist = double.infinity;
-    for (final e in candidates) {
-      final distToMid = (e.paramsB - targetParams).abs();
-      final distToSweet = (e.paramsB - sweetSpot).abs();
-      final dist = distToSweet < 1.5 ? distToSweet : distToMid;
-      if (dist < bestDist) {
-        bestDist = dist;
-        balanced = e;
-      }
-    }
-    // Keep labels distinct when possible.
-    if (candidates.length >= 3 &&
-        (balanced.id == faster.id || balanced.id == best.id)) {
-      final midIndex = candidates.length ~/ 2;
-      balanced = candidates[midIndex];
-    }
+    // Best = top score; Faster = the lightest of the strong options;
+    // Balanced = the next best that's neither.
+    final best = ranked.first;
+    final top = ranked.take(5).toList();
+    final faster = top.reduce(
+        (a, b) => qualityParams(b) < qualityParams(a) ? b : a);
+    final balanced = top.firstWhere(
+      (e) => e.id != best.id && e.id != faster.id,
+      orElse: () => faster,
+    );
 
     return OnboardingModelPicks(
       faster: faster,

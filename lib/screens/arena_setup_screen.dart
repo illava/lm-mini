@@ -96,10 +96,6 @@ class _ArenaSetupScreenState extends State<ArenaSetupScreen> {
   }
 
   void _selectMode(ArenaMode mode) {
-    if (mode == ArenaMode.compare && !_isPremium) {
-      _showUpgrade();
-      return;
-    }
     setState(() => _mode = mode);
   }
 
@@ -220,55 +216,17 @@ class _ArenaSetupScreenState extends State<ArenaSetupScreen> {
     if (!ProFeatures.included) return;
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+      MaterialPageRoute(
+          builder: (_) =>
+              const SubscriptionScreen(highlight: PaywallFeature.cloudModels)),
     );
   }
 
   Future<bool> _ensureConsent() async {
     final sp = context.read<SettingsProvider>();
     final s = sp.settings;
-    final isPremium = _isPremium;
-
-    // Free: anonymous speed share is mandatory. Keep the flag on even if an
-    // older build left it off.
-    if (!isPremium) {
-      if (s.hasAcceptedArenaDataShare && s.arenaShareAnonymousResults) {
-        return true;
-      }
-      final accepted = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Anonymous speed results'),
-          content: const Text(
-            'Free Arena races share anonymous speed data (device class, model, '
-            'and tokens/sec). Prompts and answers are never uploaded.\n\n'
-            'This builds a community leaderboard so others can pick models that '
-            'fit their phones. Continue to start the race.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Continue'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted || accepted != true) return false;
-      await sp.updateSettings(
-        s.copyWith(
-          hasAcceptedArenaDataShare: true,
-          arenaShareAnonymousResults: true,
-        ),
-      );
-      return true;
-    }
-
-    // Pro: optional opt-in / opt-out.
+    // Arena is free: sharing anonymous speed results is optional for
+    // everyone (Settings can turn it off later).
     if (s.hasAcceptedArenaDataShare) return true;
     final share = await showDialog<bool>(
       context: context,
@@ -638,12 +596,6 @@ class _ArenaSetupScreenState extends State<ArenaSetupScreen> {
                     const SizedBox(height: 16),
                     _compactDeviceTip(theme, _device!),
                   ],
-                  if (ProFeatures.included &&
-                      !_isPremium &&
-                      !widget.wizardMode) ...[
-                    const SizedBox(height: 16),
-                    _proHint(theme),
-                  ],
                 ],
               ),
             ),
@@ -657,14 +609,10 @@ class _ArenaSetupScreenState extends State<ArenaSetupScreen> {
                   onBack: () => Navigator.pop(context),
                   onLightCanvas: !isDark,
                   actions: [
-                    if (ProFeatures.included && !widget.wizardMode)
+                    if (!widget.wizardMode)
                       GlassCircleIconButton(
                         tooltip: 'History',
                         onTap: () {
-                          if (!_isPremium) {
-                            _showUpgrade();
-                            return;
-                          }
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -719,16 +667,12 @@ class _ArenaSetupScreenState extends State<ArenaSetupScreen> {
             onTap: () => _selectMode(ArenaMode.benchmark),
           ),
         ),
-        // Public build: custom-prompt mode is only a paywall for free users,
-        // so it is hidden unless the entitlement is active.
-        if (ProFeatures.included || _isPremium) ...[
+        ...[
           const SizedBox(width: 8),
           Expanded(
             child: _ModeChip(
               selected: _mode == ArenaMode.compare,
-              label: _isPremium || !ProFeatures.included
-                  ? 'Your prompt'
-                  : 'Your prompt · Pro',
+              label: 'Your prompt',
               icon: Icons.chat_bubble_outline,
               onTap: () => _selectMode(ArenaMode.compare),
             ),
@@ -902,31 +846,6 @@ class _ArenaSetupScreenState extends State<ArenaSetupScreen> {
         '${cap.supportsVulkan ? ' · Vulkan' : ''} · ${cap.llmTierLabel}',
         style:
             theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-      ),
-    );
-  }
-
-  Widget _proHint(ThemeData theme) {
-    return InkWell(
-      onTap: _showUpgrade,
-      borderRadius: BorderRadius.circular(14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          children: [
-            Icon(Icons.workspace_premium_outlined,
-                size: 18, color: theme.colorScheme.primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Pro: custom prompts, cloud models, history',
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-            Icon(Icons.chevron_right,
-                size: 18, color: theme.colorScheme.outline),
-          ],
-        ),
       ),
     );
   }
@@ -1304,17 +1223,18 @@ class _ProviderThenModelSheetState extends State<_ProviderThenModelSheet> {
           cloudProvider: p,
         ));
       } else {
-        // Public build: paid cloud contestants are only a lock for free users.
-        if (!(ProFeatures.included || widget.isPremium)) continue;
+        // Arena is free; only cloud providers that are Pro themselves stay
+        // locked (the same rule as chat). Public build: never a paywall.
+        final locked = p.type.isPremium && !widget.isPremium;
+        if (locked && !ProFeatures.included) continue;
         final n = _cloudModelIds(p).length;
         list.add(_ProviderOption(
           id: _ProviderId.cloud,
           title: p.name,
-          subtitle:
-              widget.isPremium ? (n == 0 ? 'No models' : '$n models') : 'Pro',
+          subtitle: locked ? 'Pro' : (n == 0 ? 'No models' : '$n models'),
           icon: Icons.cloud_outlined,
           modelCount: n,
-          locked: !widget.isPremium,
+          locked: locked,
           cloudProvider: p,
         ));
       }

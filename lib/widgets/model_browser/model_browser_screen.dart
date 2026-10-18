@@ -6,6 +6,7 @@ import '../glass_page_header.dart';
 import '../glass_settings_scaffold.dart';
 import '../global_download_fab.dart';
 import 'model_catalog_card.dart';
+import 'model_family_card.dart';
 import 'model_details_sheet.dart';
 import 'model_row.dart';
 import '../glass_blur.dart';
@@ -45,6 +46,25 @@ class ModelBrowserScreen extends StatefulWidget {
   final bool groupByFamily;
   final List<String> familyOrder;
 
+  /// Rows always shown first, above the list or the family cards (e.g. the
+  /// built-in Apple Intelligence model, the recommended pick, downloads).
+  /// Search and filters still apply to them.
+  final List<PickableModel> pinned;
+
+  /// Phone grouping: one card per family; tapping opens that family's
+  /// models (instead of an expandable section).
+  final ValueChanged<String>? onOpenFamily;
+
+  /// Logo for a family card.
+  final Widget Function(String family)? familyLeadingBuilder;
+
+  /// Bold title for a family card (defaults to the family name).
+  final String Function(String family)? familyTitleBuilder;
+
+  /// Line under the family name, e.g. "Gemma 4 · 3 AI models".
+  final String Function(String family, List<PickableModel> models)?
+      familySubtitleBuilder;
+
   /// Desktop on-device catalog: centered column, never the phone card grid.
   final bool centeredList;
 
@@ -72,6 +92,11 @@ class ModelBrowserScreen extends StatefulWidget {
     this.bottomAction,
     this.groupByFamily = false,
     this.familyOrder = const [],
+    this.pinned = const [],
+    this.onOpenFamily,
+    this.familyLeadingBuilder,
+    this.familyTitleBuilder,
+    this.familySubtitleBuilder,
     this.centeredList = false,
     this.embedded = false,
   });
@@ -90,9 +115,13 @@ class _ModelBrowserScreenState extends State<ModelBrowserScreen> {
     super.dispose();
   }
 
-  List<PickableModel> get _visible {
+  List<PickableModel> get _visible => _filtered(widget.models);
+
+  List<PickableModel> get _visiblePinned => _filtered(widget.pinned);
+
+  List<PickableModel> _filtered(List<PickableModel> models) {
     final q = _query.trim().toLowerCase();
-    var list = widget.models;
+    var list = models;
     if (widget.selectedFilterId != 'all') {
       list = list.where((m) => m.statusKey == widget.selectedFilterId).toList();
     }
@@ -117,47 +146,71 @@ class _ModelBrowserScreenState extends State<ModelBrowserScreen> {
     final headerH = GlassPageHeader.heightFor(context);
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final pinned = _visiblePinned;
     final visible = _visible;
+    final bottomPadding = widget.bottomAction != null ? 96.0 : 28.0;
 
     final useCards = prefersWideSettingsLayout(context) && !widget.centeredList;
-    final list = widget.groupByFamily
-        ? _GroupedModelList(
+    final familyCards = widget.groupByFamily &&
+        widget.onOpenFamily != null &&
+        !useCards &&
+        !widget.centeredList;
+    final list = familyCards
+        ? _FamilyCardList(
+            pinned: pinned,
             models: visible,
             familyOrder: widget.familyOrder,
-            bottomPadding: widget.bottomAction != null ? 96 : 28,
+            bottomPadding: bottomPadding,
             footer: widget.footer,
-            onSelect: widget.onSelect,
-            onInfo: widget.onInfo,
-            trailingBuilder: widget.trailingBuilder,
-            useCards: useCards,
-            expandActiveGroups: widget.centeredList,
+            buildRow: (m) => _buildRow(context, m),
+            onOpenFamily: widget.onOpenFamily!,
+            leadingBuilder: widget.familyLeadingBuilder,
+            titleBuilder: widget.familyTitleBuilder,
+            subtitleBuilder: widget.familySubtitleBuilder,
           )
-        : useCards
-            ? _ModelCardGrid(
+        : widget.groupByFamily
+            ? _GroupedModelList(
                 models: visible,
+                familyOrder: widget.familyOrder,
                 bottomPadding: widget.bottomAction != null ? 96 : 28,
                 footer: widget.footer,
                 onSelect: widget.onSelect,
                 onInfo: widget.onInfo,
                 trailingBuilder: widget.trailingBuilder,
+                useCards: useCards,
+                expandActiveGroups: widget.centeredList,
               )
-            : ListView.separated(
-                padding: EdgeInsets.fromLTRB(
-                  14,
-                  8,
-                  14,
-                  widget.bottomAction != null ? 96 : 28,
-                ),
-                itemCount: visible.length + (widget.footer != null ? 1 : 0),
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, i) {
-                  if (widget.footer != null && i == visible.length) {
-                    return widget.footer!;
-                  }
-                  final m = visible[i];
-                  return _buildRow(context, m);
-                },
-              );
+            : useCards
+                ? _ModelCardGrid(
+                    models: visible,
+                    bottomPadding: widget.bottomAction != null ? 96 : 28,
+                    footer: widget.footer,
+                    onSelect: widget.onSelect,
+                    onInfo: widget.onInfo,
+                    trailingBuilder: widget.trailingBuilder,
+                  )
+                : ListView.separated(
+                    padding: EdgeInsets.fromLTRB(
+                      14,
+                      8,
+                      14,
+                      widget.bottomAction != null ? 96 : 28,
+                    ),
+                    itemCount: pinned.length +
+                        visible.length +
+                        (widget.footer != null ? 1 : 0),
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) {
+                      if (i < pinned.length) {
+                        return _buildRow(context, pinned[i]);
+                      }
+                      final j = i - pinned.length;
+                      if (widget.footer != null && j == visible.length) {
+                        return widget.footer!;
+                      }
+                      return _buildRow(context, visible[j]);
+                    },
+                  );
 
     final sheetBody = widget.isLoading
         ? const Center(child: CircularProgressIndicator())
@@ -232,7 +285,7 @@ class _ModelBrowserScreenState extends State<ModelBrowserScreen> {
                   child: widget.headerExtra!,
                 ),
               Expanded(
-                child: visible.isEmpty
+                child: visible.isEmpty && pinned.isEmpty
                     ? (widget.emptyState ??
                         Center(
                           child: Text(
@@ -423,6 +476,68 @@ class _ModelCardGrid extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Phone grouping: pinned rows, then one tappable card per family.
+class _FamilyCardList extends StatelessWidget {
+  final List<PickableModel> pinned;
+  final List<PickableModel> models;
+  final List<String> familyOrder;
+  final double bottomPadding;
+  final Widget? footer;
+  final Widget Function(PickableModel) buildRow;
+  final ValueChanged<String> onOpenFamily;
+  final Widget Function(String family)? leadingBuilder;
+  final String Function(String family)? titleBuilder;
+  final String Function(String family, List<PickableModel> models)?
+      subtitleBuilder;
+
+  const _FamilyCardList({
+    required this.pinned,
+    required this.models,
+    required this.familyOrder,
+    required this.bottomPadding,
+    required this.buildRow,
+    required this.onOpenFamily,
+    this.footer,
+    this.leadingBuilder,
+    this.titleBuilder,
+    this.subtitleBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = <String, List<PickableModel>>{};
+    for (final m in models) {
+      groups.putIfAbsent(m.familyGroup ?? 'Other', () => []).add(m);
+    }
+    final keys = <String>[
+      ...familyOrder.where(groups.containsKey),
+      ...groups.keys.where((k) => !familyOrder.contains(k)),
+    ];
+    return ListView(
+      padding: EdgeInsets.fromLTRB(14, 8, 14, bottomPadding),
+      children: [
+        for (final m in pinned) ...[
+          buildRow(m),
+          const SizedBox(height: 8),
+        ],
+        if (pinned.isNotEmpty && keys.isNotEmpty) const SizedBox(height: 6),
+        for (final family in keys) ...[
+          ModelFamilyCard(
+            family: family,
+            title: titleBuilder?.call(family),
+            leading: leadingBuilder?.call(family),
+            subtitle: subtitleBuilder?.call(family, groups[family]!),
+            models: groups[family]!,
+            onTap: () => onOpenFamily(family),
+          ),
+          const SizedBox(height: 10),
+        ],
+        if (footer != null) footer!,
+      ],
     );
   }
 }

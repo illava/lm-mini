@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -36,6 +37,7 @@ import '../services/local_model_download_service.dart';
 import '../widgets/conversation_list_item.dart';
 import '../widgets/folder_list_item.dart';
 import '../widgets/folder_dialog.dart';
+import '../utils/home_conversation_filter.dart';
 import '../widgets/get_started_setup_dialog.dart';
 import '../widgets/deprecation_banners.dart';
 import '../widgets/premium_grant_banner.dart';
@@ -49,6 +51,8 @@ import '../widgets/home_glass_header.dart';
 import '../utils/theme_extensions.dart';
 import '../utils/group_chat_pro_gate.dart';
 import '../pro/pro_features.dart';
+import '../services/app_admin_config.dart';
+import 'welcome_wizard_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   /// When true, the HomeScreen is hosted inside the DesktopShell and should
@@ -361,6 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       onOpenArena: widget.embeddedInShell ? null : _openArena,
       onNewGroupChat: ProFeatures.included ? _createNewGroupChat : null,
+      onRunOnboarding: _canRunOnboarding ? _runOnboarding : null,
       settingsButton: widget.embeddedInShell
           ? const SizedBox.shrink()
           : const FeatureRequestAwareSettingsButton(useGlass: true),
@@ -390,19 +395,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   isDark ? Colors.white : Colors.black.withValues(alpha: 0.88),
             ),
           )
-        : GlassCircleIconButton(
+        : _NewChatFab(
             size: phoneLandscapeSplit ? 50 : 58,
             tooltip: groupCreate ? l10n.newGroupChat : l10n.newChat,
-            isActive: true,
-            prominent: true,
-            onLightCanvas: !isDark,
+            label: groupCreate ? l10n.fabGroupLabel : l10n.fabChatLabel,
+            icon: groupCreate
+                ? Icons.group_add_rounded
+                : Icons.chat_bubble_rounded,
+            iconSize: phoneLandscapeSplit ? 22 : 24,
             onTap: groupCreate ? _createNewGroupChat : _createNewChat,
-            child: Icon(
-              groupCreate ? Icons.group_add_rounded : Icons.add_rounded,
-              size: phoneLandscapeSplit ? 24 : 28,
-              color:
-                  isDark ? Colors.white : Colors.black.withValues(alpha: 0.88),
-            ),
           );
     final masterFab = ListenableBuilder(
       listenable: LocalModelDownloadService.instance,
@@ -905,7 +906,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final conversations = context.read<ChatProvider>().listedConversations;
 
         // "All Conversations" header (not part of reorderable list)
-        final allCount = conversations.where((c) => c.folderId == null).length;
+        final allCount = folderConversationCount(conversations, null);
 
         return Column(
           children: [
@@ -966,9 +967,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   itemBuilder: (context, index) {
                     final folder = folderProvider.folders[index];
-                    final count = conversations
-                        .where((c) => c.folderId == folder.id)
-                        .length;
+                    final count =
+                        folderConversationCount(conversations, folder.id);
 
                     return ReorderableDragStartListener(
                       key: ValueKey(folder.id),
@@ -1271,7 +1271,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ? (isDark ? Colors.white : Colors.black.withValues(alpha: 0.88))
         : const Color(0xFFF5F7FA);
 
-    Widget personaColumn({required Widget avatar, required String label}) {
+    Widget personaColumn({
+      required Widget avatar,
+      required String label,
+      bool shrinkLabel = false,
+    }) {
       return SizedBox(
         width: labelWidth,
         child: Column(
@@ -1302,7 +1306,11 @@ class _HomeScreenState extends State<HomeScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-          ],
+          ].map((w) {
+            // "New Persona" is wider than a name: shrink it to fit.
+            if (!shrinkLabel || w is! Text) return w;
+            return FittedBox(fit: BoxFit.scaleDown, child: w);
+          }).toList(),
         ),
       );
     }
@@ -1384,13 +1392,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             const SystemPromptsScreen(openNewPersona: true)),
                   ),
                   child: personaColumn(
-                    label: AppLocalizations.of(context).newPersonaShort,
+                    shrinkLabel: true,
+                    label: AppLocalizations.of(context).newPersonaLabel,
                     avatar: CircleAvatar(
                       radius: avatarRadius,
                       backgroundColor:
                           Theme.of(context).colorScheme.surfaceContainerHighest,
                       child: Icon(
-                        Icons.add,
+                        Icons.person_add_alt_1_rounded,
                         size: 28,
                         color: isDark
                             ? Colors.white
@@ -1452,23 +1461,14 @@ class _HomeScreenState extends State<HomeScreen> {
       chatProvider.listedConversations.any((c) => c.isGroupChat);
 
   /// Conversations visible under the current home filters (tab / folder / search).
-  List<ChatConversation> _visibleConversations(ChatProvider chatProvider) {
-    var list = chatProvider.listedConversations;
-    if (_listTab == HomeListTab.groups) {
-      list = list.where((c) => c.isGroupChat).toList();
-    } else {
-      list = list.where((c) => !c.isGroupChat).toList();
-    }
-    if (_searchQuery.isNotEmpty) {
-      list = list
-          .where((c) => c.title.toLowerCase().contains(_searchQuery))
-          .toList();
-    }
-    if (_selectedFolderId != null) {
-      list = list.where((c) => c.folderId == _selectedFolderId).toList();
-    }
-    return list;
-  }
+  /// Inside a folder, group chats and 1:1 chats are listed together.
+  List<ChatConversation> _visibleConversations(ChatProvider chatProvider) =>
+      filterHomeConversations(
+        chatProvider.listedConversations,
+        groupsTab: _listTab == HomeListTab.groups,
+        folderId: _selectedFolderId,
+        query: _searchQuery,
+      );
 
   Widget _buildConversationsList(
     ChatProvider chatProvider, {
@@ -1643,6 +1643,16 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ArenaSetupScreen()),
+    );
+  }
+
+  /// Admins only: the ⋯ menu can re-open the welcome wizard for testing.
+  bool get _canRunOnboarding =>
+      AppAdminConfig.isAdmin(FirebaseAuth.instance.currentUser?.uid);
+
+  void _runOnboarding() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const WelcomeWizardScreen()),
     );
   }
 
@@ -2258,7 +2268,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           FilledButton(
             onPressed: () async {
+              final chatProvider = context.read<ChatProvider>();
               await context.read<FolderProvider>().deleteFolder(folderId);
+              // The DB unfiled this folder's chats and group chats; refresh
+              // the in-memory list so counts and the unfiled list match.
+              unawaited(chatProvider.loadConversations(silent: true));
               Navigator.pop(context);
               setState(() {
                 _selectedFolderId = null;
@@ -2291,16 +2305,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 leading: const Icon(Icons.folder_off),
                 title: Text(l10n.noFolder),
                 onTap: () async {
-                  final conversation =
-                      chatProvider.conversationById(conversationId);
-                  if (conversation == null) {
-                    Navigator.pop(dialogContext);
-                    return;
-                  }
-                  await chatProvider.updateConversation(
-                    conversation.copyWith(folderId: null),
-                  );
-                  Navigator.pop(dialogContext);
+                  await _moveConversationsToFolder(
+                      chatProvider, [conversationId], null);
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
                 },
               ),
               const Divider(),
@@ -2309,15 +2316,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   leading: _folderLeading(context, folder, size: 32),
                   title: Text(folder.name),
                   onTap: () async {
-                    final conversation =
-                        chatProvider.conversationById(conversationId);
-                    if (conversation == null) {
-                      if (dialogContext.mounted) Navigator.pop(dialogContext);
-                      return;
-                    }
-                    await chatProvider.updateConversation(
-                      conversation.copyWith(folderId: folder.id),
-                    );
+                    await _moveConversationsToFolder(
+                        chatProvider, [conversationId], folder.id);
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                   },
                 );
@@ -2438,15 +2438,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _moveManyToFolder(
-      ChatProvider chatProvider, String? folderId) async {
-    for (final id in _selectedIds.toList()) {
+  /// Files chats (1:1 or group) under [folderId]; `null` = no folder.
+  Future<void> _moveConversationsToFolder(ChatProvider chatProvider,
+      Iterable<String> conversationIds, String? folderId) async {
+    for (final id in conversationIds) {
       final conversation = chatProvider.conversationById(id);
       if (conversation == null) continue;
       await chatProvider.updateConversation(
-        conversation.copyWith(folderId: folderId),
+        conversation.movedToFolder(folderId),
       );
     }
+  }
+
+  Future<void> _moveManyToFolder(
+      ChatProvider chatProvider, String? folderId) async {
+    await _moveConversationsToFolder(
+        chatProvider, _selectedIds.toList(), folderId);
     if (mounted) {
       setState(() {
         _selectedIds.clear();
@@ -2465,13 +2472,8 @@ class _HomeScreenState extends State<HomeScreen> {
           final newFolder =
               await folderProvider.createFolder(name, color: color);
           if (newFolder != null) {
-            for (final id in conversationIds) {
-              final conversation = chatProvider.conversationById(id);
-              if (conversation == null) continue;
-              await chatProvider.updateConversation(
-                conversation.copyWith(folderId: newFolder.id),
-              );
-            }
+            await _moveConversationsToFolder(
+                chatProvider, conversationIds, newFolder.id);
           }
           if (mounted) {
             setState(() {
@@ -2721,6 +2723,88 @@ class _HomeDownloadOnDevicePrompt extends StatelessWidget {
             label: Text(l10n.homeDownloadModel),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// New chat / new group button: solid accent circle with a label under it,
+/// so it reads as the main action on the home screen.
+class _NewChatFab extends StatelessWidget {
+  final double size;
+  final String tooltip;
+  final String label;
+  final IconData icon;
+  final double iconSize;
+  final VoidCallback onTap;
+
+  const _NewChatFab({
+    required this.size,
+    required this.tooltip,
+    required this.label,
+    required this.icon,
+    required this.iconSize,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label: tooltip,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: tooltip,
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.lerp(cs.primary, Colors.white, 0.12)!,
+                      cs.primary,
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: cs.primary.withValues(alpha: 0.40),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, size: iconSize, color: cs.onPrimary),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: cs.surface.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: cs.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

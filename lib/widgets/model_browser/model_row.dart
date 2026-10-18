@@ -138,7 +138,7 @@ class ModelRow extends StatelessWidget {
                                     children: [
                                       if (model.isRecommended)
                                         _StatusPill(
-                                          label: l10n.bestForYou,
+                                          label: l10n.modelRecommended,
                                           icon: Icons.auto_awesome_rounded,
                                           color: cs.primary,
                                         ),

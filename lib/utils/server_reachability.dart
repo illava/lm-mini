@@ -145,12 +145,18 @@ HostScope _classifyIpv6(String host) {
 
 /// Pure decision table. See agent.md / report for the matrix.
 ///
-/// | scope        | offline      | Wi‑Fi/Ethernet | VPN only | mobile only    |
-/// |--------------|--------------|----------------|----------|----------------|
-/// | loopback     | proceed      | proceed        | proceed  | proceed        |
-/// | public       | blockOffline | proceed        | proceed  | proceed        |
-/// | vpnRange     | blockOffline | probe          | probe    | probe          |
-/// | localNetwork | blockOffline | probe          | probe    | blockNeedsWifi |
+/// | scope        | offline | Wi‑Fi/Ethernet | VPN only | mobile only |
+/// |--------------|---------|----------------|----------|-------------|
+/// | loopback     | proceed | proceed        | proceed  | proceed     |
+/// | public       | probe   | proceed        | proceed  | proceed     |
+/// | vpnRange     | probe   | probe          | probe    | probe       |
+/// | localNetwork | probe   | probe          | probe    | probe       |
+///
+/// Nothing is blocked on the connection type alone: iOS doesn't report
+/// every VPN (Tailscale, WireGuard…), and "offline" can be stale. The probe
+/// decides; only when it fails does the caller explain offline / Wi‑Fi.
+/// [PreflightDecision.blockOffline] / [PreflightDecision.blockNeedsWifi]
+/// are no longer returned.
 PreflightDecision decide({
   required HostScope hostScope,
   required bool isOffline,
@@ -158,16 +164,13 @@ PreflightDecision decide({
   required bool hasVpn,
 }) {
   if (hostScope == HostScope.loopback) return PreflightDecision.proceed;
-  if (isOffline) return PreflightDecision.blockOffline;
+  if (isOffline) return PreflightDecision.probe;
   switch (hostScope) {
     case HostScope.public:
       return PreflightDecision.proceed;
     case HostScope.vpnRange:
-      return PreflightDecision.probe;
     case HostScope.localNetwork:
-      return (hasLocalNetwork || hasVpn)
-          ? PreflightDecision.probe
-          : PreflightDecision.blockNeedsWifi;
+      return PreflightDecision.probe;
     case HostScope.loopback:
       return PreflightDecision.proceed;
   }

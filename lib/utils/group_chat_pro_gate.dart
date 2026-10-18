@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../pro/pro_features.dart';
 import '../providers/chat_provider.dart';
 import '../screens/subscription_screen.dart';
+import '../widgets/pro_feature_teaser.dart';
 
 /// Group Chat is configurable for everyone; sending requires Pro.
 ///
@@ -35,30 +36,7 @@ class GroupChatProGate {
       );
       return;
     }
-    final upgrade = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.group_rounded),
-        title: Text(l10n.groupChatProRequiredTitle),
-        content: Text(l10n.groupChatProRequiredBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(l10n.groupChatProRequiredUpgrade),
-          ),
-        ],
-      ),
-    );
-
-    if (upgrade == true && context.mounted) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-      );
-    }
+    // Explain what group chat does (animation), then Get Pro → paywall.
+    await showProFeatureTeaser(context, PaywallFeature.groupChat);
   }
 }

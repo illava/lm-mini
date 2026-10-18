@@ -3,6 +3,7 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   private var mlxBridge: MLXBridge?
+  private var appleAIBridge: AppleIntelligenceBridge?
   private var speechBridge: MacSpeechBridge?
 
   /// Matches Flutter desktop shell `Color(0xFF0E1117)`.
@@ -39,6 +40,8 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     mlxBridge = MLXBridge(messenger: flutterViewController.engine.binaryMessenger)
+    appleAIBridge = AppleIntelligenceBridge(
+      messenger: flutterViewController.engine.binaryMessenger)
     speechBridge = MacSpeechBridge(
       messenger: flutterViewController.engine.binaryMessenger)
 

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../desktop/desktop_platform.dart';
 import '../l10n/app_localizations.dart';
@@ -16,18 +17,30 @@ import '../services/local_model_catalog.dart';
 import '../services/local_model_download_service.dart';
 import '../services/on_device_llm_service.dart';
 import '../services/on_device_mlx_endpoint.dart';
+import '../services/apple_intelligence_endpoint.dart';
+import '../widgets/apple_intelligence_card.dart';
 import '../widgets/home_glass_header.dart';
 import '../widgets/huggingface_download_flow.dart';
 import '../widgets/model_browser/model_browser_screen.dart';
+import '../widgets/model_browser/model_family_card.dart';
 import '../widgets/model_browser/on_device_adapter.dart';
 import 'subscription_screen.dart';
 
 enum _ImportKind { gguf, mlx }
 
+/// Marks the built-in Apple Intelligence row in the on-device list.
+class _AppleIntelligenceChoice {
+  const _AppleIntelligenceChoice();
+}
+
 /// On-device model catalog browser (Settings entry).
 class LocalModelsScreen extends StatefulWidget {
   final bool embedded;
-  const LocalModelsScreen({super.key, this.embedded = false});
+
+  /// Set when opened from a family card: only that family's models.
+  final String? familyFilter;
+  const LocalModelsScreen(
+      {super.key, this.embedded = false, this.familyFilter});
 
   @override
   State<LocalModelsScreen> createState() => _LocalModelsScreenState();
@@ -42,15 +55,22 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
   LocalEngine? _engineFilter;
   String _filterId = 'all';
   bool _importing = false;
-  bool _groupModels = false;
+  bool _groupModels = true;
+  AppleIntelligenceStatus? _appleStatus;
+
+  /// Free plan: keep the screen awake while a model downloads here.
+  bool _holdingWakelock = false;
   bool _showSmallModels = false;
   String? _activatingId;
+
   /// Catalog model focused for the Download FAB (not yet on device).
   LocalModelSpec? _pendingDownload;
 
   @override
   void dispose() {
     _downloads.removeListener(_refreshStorage);
+    _downloads.removeListener(_syncWakelock);
+    if (_holdingWakelock) unawaited(WakelockPlus.disable());
     super.dispose();
   }
 
@@ -59,6 +79,17 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
     super.initState();
     _bootstrap();
     _downloads.addListener(_refreshStorage);
+    _downloads.addListener(_syncWakelock);
+  }
+
+  /// Free plan downloads stop when the phone locks, so hold the screen on
+  /// while one is running and this screen is open.
+  void _syncWakelock() {
+    final want = !ProFeatures.isPro &&
+        _downloads.entries.any((e) => e.status == LocalModelStatus.downloading);
+    if (want == _holdingWakelock) return;
+    _holdingWakelock = want;
+    unawaited(want ? WakelockPlus.enable() : WakelockPlus.disable());
   }
 
   Future<void> _refreshStorage() async {
@@ -77,6 +108,83 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
       _totalDiskBytes = bytes;
       _initializing = false;
     });
+    _syncWakelock();
+    if (widget.familyFilter != null) return;
+    final apple = await AppleIntelligenceCard.status(refresh: true);
+    if (!mounted) return;
+    setState(() => _appleStatus = apple);
+    await _maybeAutoSelectApple(apple);
+  }
+
+  /// No model downloaded and chat is set to on-device: Apple's built-in
+  /// model is the only thing that can answer, so use it.
+  Future<void> _maybeAutoSelectApple(AppleIntelligenceStatus status) async {
+    if (status != AppleIntelligenceStatus.available) return;
+    final sp = context.read<SettingsProvider>();
+    final kind = sp.settings.activeProviderKind;
+    if (kind == 'appleIntelligence') return;
+    final onDevice = kind == 'onDeviceGguf' || kind == 'onDeviceMlx';
+    if (!onDevice && sp.isProviderConfigured()) return;
+    if (_downloads.readyEntries.isNotEmpty) return;
+    await _useAppleIntelligence();
+  }
+
+  Future<void> _useAppleIntelligence() async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final l10n = AppLocalizations.of(context);
+    await context.read<SettingsProvider>().activateAppleIntelligence();
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(l10n.appleIntelligenceNowUsing),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  String _pageTitle(BuildContext context) {
+    final family = widget.familyFilter;
+    if (family == null) return 'On-Device Models';
+    if (family == LocalModelCatalog.olderModelsFamily) {
+      return AppLocalizations.of(context).olderModelsTitle;
+    }
+    final line = LocalModelCatalog.familyLines(family);
+    return line.isEmpty ? family : line;
+  }
+
+  /// The Apple Intelligence row, or null where it can't be used.
+  PickableModel? _appleRow(BuildContext context, String activeKind) {
+    final status = _appleStatus;
+    if (status == null || !AppleIntelligenceCard.isOffered(status)) {
+      return null;
+    }
+    final l10n = AppLocalizations.of(context);
+    final active = activeKind == 'appleIntelligence';
+    final subtitle = switch (status) {
+      AppleIntelligenceStatus.appleIntelligenceNotEnabled =>
+        l10n.appleIntelligenceTurnOn,
+      AppleIntelligenceStatus.modelNotReady =>
+        l10n.appleIntelligenceGettingReady,
+      _ =>
+        active ? l10n.appleIntelligenceInUse : l10n.appleIntelligenceSubtitle,
+    };
+    return PickableModel(
+      id: 'apple-intelligence',
+      displayName: 'Apple Intelligence',
+      subtitle: subtitle,
+      isLoaded: active,
+      isSelected: active,
+      familyGroup: 'Apple',
+      typeLabel: l10n.appleIntelligenceBadge,
+      providerKind: ModelProviderKind.onDevice,
+      statusKey: 'downloaded',
+      details: const [
+        ModelDetailRow('Engine', 'Apple Foundation Models'),
+        ModelDetailRow(
+            'Context', '${AppleIntelligenceEndpoint.contextTokens} tokens'),
+        ModelDetailRow('Download', 'None, built into the OS'),
+      ],
+      source: const _AppleIntelligenceChoice(),
+    );
   }
 
   bool _isFreeTierBlocked(LocalModelSpec spec) {
@@ -121,6 +229,10 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
             return false;
           }
           if (_engineFilter != null && s.engine != _engineFilter) return false;
+          final family = widget.familyFilter;
+          if (family != null && LocalModelCatalog.familyGroup(s) != family) {
+            return false;
+          }
           return true;
         }
 
@@ -139,18 +251,15 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
 
         final vramPick =
             _cap == null ? null : LocalModelCatalog.recommendedForVram(_cap!);
-        final recommendedIds = <String>{
-          if (desktop && vramPick != null)
-            vramPick.id
-          else if (_cap != null)
-            ...LocalModelCatalog.recommendationsFor(_cap!, limit: 3)
-                .map((e) => e.id),
-        };
         final best = _cap == null
             ? null
             : (desktop
                 ? (vramPick ?? LocalModelCatalog.bestFor(_cap!))
                 : LocalModelCatalog.bestFor(_cap!));
+        // One "Recommended" badge: the best fit for this device.
+        final recommendedIds = <String>{
+          if (best != null && passEngine(best)) best.id,
+        };
 
         final downloaded = _downloads.entries
             .where((e) =>
@@ -247,93 +356,149 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
           }
           final ranked = lines.entries.toList()
             ..sort((a, b) {
-              final aRec = models
-                  .any((m) => m.familyGroup == a.key && m.isRecommended);
-              final bRec = models
-                  .any((m) => m.familyGroup == b.key && m.isRecommended);
+              final aRec =
+                  models.any((m) => m.familyGroup == a.key && m.isRecommended);
+              final bRec =
+                  models.any((m) => m.familyGroup == b.key && m.isRecommended);
               if (aRec != bRec) return aRec ? -1 : 1;
               return b.value.compareTo(a.value);
             });
           lineOrder.addAll(ranked.map((e) => e.key));
         }
 
+        // Top of the list: Apple's built-in model, then the recommended
+        // pick, then what's already on this device. In grouped mode the
+        // families below still list every model.
+        final familyPage = widget.familyFilter != null;
+        final grouped = !familyPage && (desktop || _groupModels);
+        final pinned = <PickableModel>[];
+        if (!familyPage && !desktop) {
+          final apple = _appleRow(context,
+              context.read<SettingsProvider>().settings.activeProviderKind);
+          if (apple != null) pinned.add(apple);
+          // Grouped: what's on this device stays on top; the best-quality
+          // pick is badged on its family card instead of pinned.
+          if (grouped) {
+            pinned.addAll(models.where((m) =>
+                m.statusKey == 'downloaded' &&
+                m.familyGroup != LocalModelCatalog.olderModelsFamily));
+          } else {
+            pinned.addAll(models.where((m) => m.isRecommended));
+          }
+        }
+        final pinnedIds = pinned.map((m) => m.id).toSet();
+        final listed = grouped
+            ? models
+            : models.where((m) => !pinnedIds.contains(m.id)).toList();
+
         return ModelBrowserScreen(
-          embedded: widget.embedded,
-          title: 'On-Device Models',
+          embedded: widget.embedded && !familyPage,
+          title: _pageTitle(context),
           isLoading: _initializing,
-          models: models,
+          models: listed,
+          pinned: pinned,
           showDownloadFab: true,
           centeredList: desktop,
-          groupByFamily: desktop || _groupModels,
-          familyOrder:
-              desktop ? lineOrder : LocalModelCatalog.familyOrder,
+          onOpenFamily: desktop
+              ? null
+              : (family) => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => LocalModelsScreen(familyFilter: family),
+                    ),
+                  ),
+          familyLeadingBuilder: (family) =>
+              family == LocalModelCatalog.olderModelsFamily
+                  ? Icon(Icons.history_rounded, color: cs.onSurfaceVariant)
+                  : BrandLogo.forAsset(
+                      context, LocalModelCatalog.familyLogo(family), family),
+          familyTitleBuilder: (family) {
+            if (family == LocalModelCatalog.olderModelsFamily) {
+              return AppLocalizations.of(context).olderModelsTitle;
+            }
+            final line = LocalModelCatalog.familyLines(family);
+            return line.isEmpty ? family : line;
+          },
+          familySubtitleBuilder: (family, items) {
+            final l10n = AppLocalizations.of(context);
+            final count = l10n.aiModelsCount(items.length);
+            if (family == LocalModelCatalog.olderModelsFamily) {
+              return '${l10n.olderModelsSubtitle} · $count';
+            }
+            // The title shows the model line; the company goes here.
+            final company = LocalModelCatalog.familyCompany(family);
+            return company.isEmpty ? count : '$company · $count';
+          },
+          groupByFamily: grouped,
+          familyOrder: desktop ? lineOrder : LocalModelCatalog.familyOrder,
           filters: const [
             ModelBrowserFilter(id: 'all', label: 'All'),
             ModelBrowserFilter(id: 'downloaded', label: 'Downloaded'),
           ],
           selectedFilterId: _filterId,
           onFilterChanged: (id) => setState(() => _filterId = id),
-          filtersTrailing: desktop
-              ? Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: Checkbox(
-                        value: _showSmallModels,
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        onChanged: (v) =>
-                            setState(() => _showSmallModels = v ?? false),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () => setState(
-                          () => _showSmallModels = !_showSmallModels),
-                      child: Text(
-                        'Small models',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurfaceVariant,
+          filtersTrailing: familyPage
+              ? null
+              : desktop
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: Checkbox(
+                            value: _showSmallModels,
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            onChanged: (v) =>
+                                setState(() => _showSmallModels = v ?? false),
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
-                )
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: Checkbox(
-                        value: _groupModels,
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        onChanged: (v) =>
-                            setState(() => _groupModels = v ?? false),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () =>
-                          setState(() => _groupModels = !_groupModels),
-                      child: Text(
-                        'Group',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurfaceVariant,
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () => setState(
+                              () => _showSmallModels = !_showSmallModels),
+                          child: Text(
+                            'Small models',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: Checkbox(
+                            value: _groupModels,
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            onChanged: (v) =>
+                                setState(() => _groupModels = v ?? false),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () =>
+                              setState(() => _groupModels = !_groupModels),
+                          child: Text(
+                            'Group',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
           actions: [
             GlassCircleIconButton(
               tooltip: 'Import model from Files',
@@ -362,8 +527,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                       const Positioned(
                         right: -4,
                         bottom: -4,
-                        child:
-                            Icon(Icons.star, size: 14, color: Colors.amber),
+                        child: Icon(Icons.star, size: 14, color: Colors.amber),
                       ),
                   ],
                 ),
@@ -372,24 +536,6 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
           headerExtra: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (best != null && passEngine(best)) ...[
-                _BestForYouCard(
-                  spec: best,
-                  cap: _cap!,
-                  vramTarget: desktop,
-                  onTap: () {
-                    final entry = _downloads.entryById(best.id);
-                    final status =
-                        entry?.status ?? LocalModelStatus.notDownloaded;
-                    if (status == LocalModelStatus.ready) {
-                      _activate(best);
-                    } else {
-                      setState(() => _pendingDownload = best);
-                    }
-                  },
-                ),
-                const SizedBox(height: 10),
-              ],
               SegmentedButton<LocalEngine?>(
                 segments: [
                   const ButtonSegment(value: null, label: Text('All')),
@@ -459,6 +605,13 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
               : null,
           onSelect: (m) {
             final spec = m.source;
+            if (spec is _AppleIntelligenceChoice) {
+              if (_appleStatus == AppleIntelligenceStatus.available &&
+                  !m.isLoaded) {
+                unawaited(_useAppleIntelligence());
+              }
+              return;
+            }
             if (spec is! LocalModelSpec) return;
             final entry = _downloads.entryById(spec.id);
             final status = entry?.status ?? LocalModelStatus.notDownloaded;
@@ -481,8 +634,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
 
             final items = <PopupMenuEntry<String>>[];
             if (status == LocalModelStatus.ready && !m.isSelected) {
-              items.add(
-                  const PopupMenuItem(value: 'use', child: Text('Use')));
+              items.add(const PopupMenuItem(value: 'use', child: Text('Use')));
             }
             if ((status == LocalModelStatus.notDownloaded ||
                     status == LocalModelStatus.failed) &&
@@ -493,13 +645,13 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
               ));
             }
             if (status == LocalModelStatus.downloading) {
-              items.add(const PopupMenuItem(
-                  value: 'cancel', child: Text('Cancel')));
+              items.add(
+                  const PopupMenuItem(value: 'cancel', child: Text('Cancel')));
             }
             if (status == LocalModelStatus.ready ||
                 status == LocalModelStatus.failed) {
-              items.add(const PopupMenuItem(
-                  value: 'delete', child: Text('Delete')));
+              items.add(
+                  const PopupMenuItem(value: 'delete', child: Text('Delete')));
             }
             if (items.isEmpty) return const SizedBox.shrink();
 
@@ -807,7 +959,9 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
     // offered there, so this is a backstop only.
     if (!ProFeatures.included) return;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+      MaterialPageRoute(
+          builder: (_) => const SubscriptionScreen(
+              highlight: PaywallFeature.onDeviceModels)),
     );
   }
 
@@ -872,86 +1026,5 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
         ),
       );
     }
-  }
-}
-
-class _BestForYouCard extends StatelessWidget {
-  final LocalModelSpec spec;
-  final DeviceCapability cap;
-  final VoidCallback onTap;
-  final bool vramTarget;
-
-  const _BestForYouCard({
-    required this.spec,
-    required this.cap,
-    required this.onTap,
-    this.vramTarget = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final engine = spec.engine == LocalEngine.mlx
-        ? 'MLX'
-        : spec.engine == LocalEngine.moeStream
-            ? 'Stream'
-            : 'GGUF';
-    final why = vramTarget
-        ? 'Recommended · ~70% of ${cap.ramGb.round()} GB unified memory'
-        : [
-            if (cap.supportsMlx && spec.engine == LocalEngine.mlx) 'MLX',
-            if (cap.supportsVulkan && spec.engine == LocalEngine.fllama)
-              'Vulkan',
-            '${cap.ramGb.toStringAsFixed(0)} GB RAM',
-          ].join(' · ');
-
-    return Material(
-      color: cs.primaryContainer.withValues(alpha: 0.45),
-      borderRadius: BorderRadius.circular(14),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: Row(
-            children: [
-              Icon(Icons.auto_awesome_rounded, color: cs.primary, size: 22),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Best for this device',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: cs.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${spec.displayName} · $engine',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                    Text(
-                      why,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right, color: cs.outline),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

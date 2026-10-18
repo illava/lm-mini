@@ -3,7 +3,7 @@ description: "A companion app for LM Studio, Ollama and oMLX that lets you chat 
 
 publish_to: 'none'
 
-version: 1.10.3+150
+version: 1.10.4+155
 
 environment:
   sdk: '>=3.6.0 <4.0.0'
@@ -89,6 +89,8 @@ dependencies:
     git:
       url: https://github.com/Telosnex/fllama.git
       ref: main
+  # Brand logos on the on-device model family cards.
+  flutter_svg: ^2.2.4
   video_player: ^2.11.1
   local_auth: ^2.3.0
 
@@ -107,9 +109,12 @@ flutter:
   assets:
     - assets/icons/app_icon.png
     - assets/icons/splash_icon.png
+    - assets/icons/brands/
     - assets/images/
     - assets/images/persona_pack/
     - google_fonts/
+    # Noto Sans for PDF export (Latin / Greek / Cyrillic), OFL — see assets/fonts/OFL.txt.
+    - assets/fonts/
 
 # App Icon Configuration
 flutter_launcher_icons:

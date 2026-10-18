@@ -201,6 +201,13 @@ abstract final class LmsMcpError {
     if (mentionsSandbox) return sandboxUserMessage;
     if (mentionsSearch) return proSearchUserMessage;
     if (name != null && name.isNotEmpty) {
+      // LMS refuses app-added (ephemeral) MCPs on LAN / .local / private
+      // hosts. It only loads those from its own mcp.json.
+      if (msg.toLowerCase().contains('non-public address')) {
+        return 'LM Studio only connects to MCP server "$name" on your '
+            'network when it is set up in LM Studio itself. Add it in '
+            'LM Studio (Program → Integrations → mcp.json).';
+      }
       return "Can't reach MCP server \"$name\". Check the server URL in "
           'LM Studio (Program → Integrations).';
     }
@@ -215,7 +222,8 @@ abstract final class LmsMcpError {
     if (userMessage.contains('not recognized by LM Studio')) {
       return '⚠️ MCP not recognized by LM Studio...';
     }
-    if (userMessage.startsWith("Can't reach MCP server")) {
+    if (userMessage.startsWith("Can't reach MCP server") ||
+        userMessage.startsWith('LM Studio only connects to MCP server')) {
       return '⚠️ MCP server unreachable...';
     }
     if (userMessage.startsWith('Code Sandbox')) {
