@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../desktop_platform.dart';
+import 'sidecar_load_timing.dart';
 import 'sidecar_port.dart';
 
 /// Manages the desktop llama.cpp `llama-server` sidecar process.
@@ -36,8 +37,8 @@ class DesktopRuntimeManager extends ChangeNotifier {
   String? _loadedModelPath;
   String? _lastError;
   int _port = defaultPort;
-  bool _starting = false;
   final StringBuffer _stderrBuf = StringBuffer();
+  DateTime? _lastLogAt;
 
   /// Optional user/override path to `llama-server` (dev only).
   String? configuredBinaryPath;
@@ -47,15 +48,83 @@ class DesktopRuntimeManager extends ChangeNotifier {
   /// [DesktopHostService]. Returns `null` when no GGUF model is available.
   Future<String?> Function()? builtinModelResolver;
 
+  /// Every downloaded GGUF (full paths — the id llama-server reports) a phone
+  /// may switch to. Set by [DesktopHostService].
+  Future<List<String>> Function()? builtinModelLister;
+
+  /// True while a phone request is being served through the host proxy. A
+  /// model switch must not kill that generation. Set by the proxy.
+  bool Function()? isBusy;
+
+  /// How long a Mac-side switch to another model waits for a phone request
+  /// to finish before giving up (the caller then falls back).
+  static const Duration busyWait = Duration(seconds: 60);
+
+  /// The one start in progress, whoever asked (Mac chat, phone, warm-up).
+  Future<bool>? _startInFlight;
+  String? _startInFlightModel;
   Future<bool>? _ensureBuiltinInFlight;
+  int? _ramBytes;
+  bool _ramProbed = false;
 
   bool get isRunning => _process != null;
-  bool get isStarting => _starting;
+  bool get isStarting => _startInFlight != null;
+
+  /// Model the in-progress start is loading (null when idle).
+  String? get startingModelPath => _startInFlightModel;
   String? get binaryPath => _binaryPath;
   String? get loadedModelPath => _loadedModelPath;
   String? get lastError => _lastError;
   int get port => _port;
   String get baseUrl => 'http://$defaultHost:$_port';
+
+  int _localStreams = 0;
+
+  /// [DesktopSidecarClient] brackets each Mac-side chat stream with this so a
+  /// phone's model switch doesn't kill the Mac's own answer either.
+  void markLocalStream(bool active) {
+    _localStreams += active ? 1 : -1;
+    if (_localStreams < 0) _localStreams = 0;
+  }
+
+  /// A phone (via the proxy) or the Mac itself is mid-answer on the sidecar.
+  bool get isServing => _busy;
+
+  bool get _busy {
+    if (_localStreams > 0) return true;
+    try {
+      return isBusy?.call() ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Context window when the caller does not ask for one.
+  ///
+  /// 16k fits the multi-turn chats phones send without truncating, and with
+  /// `--parallel 1` costs ~2 GiB of KV cache on an 8B GQA model (f16 KV,
+  /// ~128 KiB/token) — fine next to the weights on a 16 GB Mac. 8 GB Macs keep
+  /// the old 8k so the KV cache doesn't push a 4–5 GB model into swap.
+  static int contextSizeForRam(int? totalRamBytes) {
+    if (totalRamBytes == null || totalRamBytes <= 0) return 16384;
+    final gib = totalRamBytes / (1024 * 1024 * 1024);
+    return gib <= 8.5 ? 8192 : 16384;
+  }
+
+  Future<int> defaultContextSize() async {
+    if (!_ramProbed) {
+      _ramProbed = true;
+      try {
+        if (Platform.isMacOS) {
+          final r = await Process.run('sysctl', ['-n', 'hw.memsize']);
+          if (r.exitCode == 0) {
+            _ramBytes = int.tryParse((r.stdout as String).trim());
+          }
+        }
+      } catch (_) {}
+    }
+    return contextSizeForRam(_ramBytes);
+  }
 
   /// Whether a `llama-server` binary can be found for this build.
   Future<bool> get isBinaryAvailable async =>
@@ -138,26 +207,84 @@ class DesktopRuntimeManager extends ChangeNotifier {
   }
 
   /// Start (or restart) the sidecar with [modelPath] loaded.
+  ///
+  /// Every start path (Mac chat, phone request, warm-up, model switch) goes
+  /// through one in-flight future: a second caller for the same model joins
+  /// it; a caller for a different model waits for it, then switches.
+  ///
+  /// A switch to a different model waits up to [busyWait] for an in-flight
+  /// phone request to finish unless [ignoreBusy] (the proxy already checked).
   Future<bool> ensureStarted({
     required String modelPath,
     int? port,
-    int contextSize = 8192,
+    int? contextSize,
+    bool ignoreBusy = false,
   }) async {
     if (!DesktopPlatform.supportsSidecarRuntime) {
       _lastError = 'Desktop runtime is only available on Mac/Windows.';
       notifyListeners();
       return false;
     }
+    while (true) {
+      final pending = _startInFlight;
+      if (pending == null) break;
+      if (_startInFlightModel == modelPath) return pending;
+      await pending;
+    }
+    // No await between the check above and claiming the slot.
+    final future = _start(
+      modelPath: modelPath,
+      port: port,
+      contextSize: contextSize,
+      ignoreBusy: ignoreBusy,
+    );
+    _startInFlight = future;
+    _startInFlightModel = modelPath;
+    notifyListeners();
+    try {
+      return await future;
+    } finally {
+      if (identical(_startInFlight, future)) {
+        _startInFlight = null;
+        _startInFlightModel = null;
+      }
+      notifyListeners();
+    }
+  }
 
+  Future<bool> _waitUntilIdle() async {
+    final deadline = DateTime.now().add(busyWait);
+    while (_busy) {
+      if (DateTime.now().isAfter(deadline)) return false;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    return true;
+  }
+
+  Future<bool> _start({
+    required String modelPath,
+    int? port,
+    int? contextSize,
+    required bool ignoreBusy,
+  }) async {
     final modelFile = File(modelPath);
     if (!await modelFile.exists()) {
       _lastError = 'Model file not found: $modelPath';
-      notifyListeners();
       return false;
     }
 
-    if (isRunning && _loadedModelPath == modelPath && await _healthOk()) {
-      return true;
+    if (isRunning && _loadedModelPath == modelPath) {
+      // Mid-generation a /health probe can time out; never restart the model
+      // a phone is streaming from.
+      if (_busy || await _healthOk()) return true;
+    }
+
+    if (isRunning && _loadedModelPath != modelPath && !ignoreBusy) {
+      if (!await _waitUntilIdle()) {
+        _lastError = '${DesktopPlatform.thisMachine} is answering a phone '
+            'request with another model. Try again when it finishes.';
+        return false;
+      }
     }
 
     await stop();
@@ -169,7 +296,6 @@ class DesktopRuntimeManager extends ChangeNotifier {
               'Reinstall LM Mini Home.'
           : 'Desktop runtime is missing from this app build. '
               'Update LM Mini from the Mac App Store, or reinstall the app.';
-      notifyListeners();
       return false;
     }
 
@@ -180,10 +306,16 @@ class DesktopRuntimeManager extends ChangeNotifier {
       } catch (_) {}
     }
 
-    _starting = true;
     _lastError = null;
-    _port = port ?? defaultPort;
+    final chosenPort = await _choosePort(port ?? defaultPort);
+    if (chosenPort == null) {
+      _lastError = 'Ports ${port ?? defaultPort}–${(port ?? defaultPort) + 19} '
+          'are all in use by other apps. Quit one and try again.';
+      return false;
+    }
+    _port = chosenPort;
     _binaryPath = binary;
+    final ctx = contextSize ?? await defaultContextSize();
     notifyListeners();
 
     try {
@@ -195,7 +327,7 @@ class DesktopRuntimeManager extends ChangeNotifier {
         '-m',
         modelPath,
         '-c',
-        '$contextSize',
+        '$ctx',
         '-ngl',
         '99',
         '--parallel',
@@ -212,44 +344,54 @@ class DesktopRuntimeManager extends ChangeNotifier {
       debugPrint('🖥️ DesktopRuntime: starting $binary ${args.join(' ')}');
       final binDir = File(binary).parent.path;
       _stderrBuf.clear();
-      _process = await Process.start(
+      _lastLogAt = DateTime.now();
+      final proc = await Process.start(
         binary,
         args,
         runInShell: false,
         workingDirectory: binDir,
         mode: ProcessStartMode.normal,
       );
+      _process = proc;
       _loadedModelPath = modelPath;
-      await _rememberPid(_process!.pid);
-      await _notifyNativeSidecarPid(_process!.pid);
+      await _rememberPid(proc.pid);
+      await _notifyNativeSidecarPid(proc.pid);
 
       void onLog(String prefix, String data) {
         final text = data.trim();
         if (text.isEmpty) return;
+        _lastLogAt = DateTime.now();
         debugPrint('$prefix $text');
       }
 
-      _process!.stdout.transform(utf8.decoder).listen((data) {
+      proc.stdout.transform(utf8.decoder).listen((data) {
         onLog('llama-server:', data);
       });
-      _process!.stderr.transform(utf8.decoder).listen((data) {
+      proc.stderr.transform(utf8.decoder).listen((data) {
         onLog('llama-server err:', data);
         if (_stderrBuf.length < 4000) _stderrBuf.write(data);
       });
-      unawaited(_process!.exitCode.then((code) async {
+      unawaited(proc.exitCode.then((code) async {
         debugPrint('🖥️ DesktopRuntime: llama-server exited ($code)');
-        if (_process != null) {
+        if (identical(_process, proc)) {
           _process = null;
           _loadedModelPath = null;
           if (code != 0 && _lastError == null) {
             _lastError = _formatExitError(code);
           }
           notifyListeners();
+          await _notifyNativeSidecarPid(0);
         }
-        await _notifyNativeSidecarPid(0);
       }));
 
-      final ready = await _waitForHealth(timeout: const Duration(seconds: 45));
+      int? bytes;
+      try {
+        bytes = await modelFile.length();
+      } catch (_) {}
+      final ready = await _waitForHealth(
+        proc,
+        timeout: SidecarLoadTiming.timeoutForModelBytes(bytes),
+      );
       if (!ready) {
         // Let stderr drain into the buffer before composing the UI error.
         await Future<void>.delayed(const Duration(milliseconds: 80));
@@ -264,30 +406,61 @@ class DesktopRuntimeManager extends ChangeNotifier {
       debugPrint('🖥️ DesktopRuntime start error: $e');
       await stop();
       return false;
+    }
+  }
+
+  /// [preferred] unless another app (not our llama-server — that was reaped)
+  /// already listens there; then the next free port above it.
+  Future<int?> _choosePort(int preferred) async {
+    for (var p = preferred; p < preferred + 20; p++) {
+      if (!await _portInUse(p)) return p;
+      if (p == preferred) {
+        debugPrint('🖥️ DesktopRuntime: :$p is taken by another app — '
+            'using the next free port');
+      }
+    }
+    return null;
+  }
+
+  Future<bool> _portInUse(int port) async {
+    Socket? s;
+    try {
+      s = await Socket.connect(defaultHost, port,
+          timeout: const Duration(milliseconds: 400));
+      return true;
+    } catch (_) {
+      return false;
     } finally {
-      _starting = false;
-      notifyListeners();
+      s?.destroy();
     }
   }
 
   /// Ensure the builtin sidecar is running so a phone's builtin-backend request
-  /// can be proxied. Starts the runtime with the model from
-  /// [builtinModelResolver] when idle. De-duplicates concurrent callers so a
-  /// burst of relay requests doesn't spawn multiple `llama-server` starts.
+  /// can be proxied. Any model already loaded (or loading — e.g. started from
+  /// the Mac's own chat) is used as-is; only an idle runtime starts with the
+  /// model from [builtinModelResolver]. Joins any in-flight start so a phone
+  /// probe never restarts a load in progress.
   ///
   /// Returns `false` (with [lastError] set) when no GGUF model is available or
   /// the runtime could not start — the proxy turns this into a clear 503.
-  Future<bool> ensureBuiltinRunning({
-    int contextSize = 8192,
-  }) async {
+  Future<bool> ensureBuiltinRunning({int? contextSize}) async {
     if (!DesktopPlatform.supportsSidecarRuntime) return false;
-    if (isRunning && await _healthOk()) return true;
+    final pending = _startInFlight;
+    if (pending != null) return pending;
+    if (isRunning && (_busy || await _healthOk())) return true;
 
-    // Coalesce concurrent starts (relay delivers requests in parallel).
+    // Coalesce concurrent callers (relay delivers requests in parallel).
     final inFlight = _ensureBuiltinInFlight;
     if (inFlight != null) return inFlight;
 
     final future = () async {
+      final started = _startInFlight;
+      if (started != null) return started;
+      final loaded = _loadedModelPath;
+      if (isRunning && loaded != null) {
+        // Running but unhealthy: restart the same model, never a different one.
+        return ensureStarted(modelPath: loaded, contextSize: contextSize);
+      }
       final resolver = builtinModelResolver;
       if (resolver == null) {
         _lastError =
@@ -314,23 +487,29 @@ class DesktopRuntimeManager extends ChangeNotifier {
     }
   }
 
-  /// Kill leftover `llama-server` on [defaultPort] from a previous app
+  /// Kill leftover `llama-server` on the sidecar port from a previous app
   /// session (Cmd-Q / crash often reparents the child to launchd).
   ///
-  /// Does not touch other ports (LM Studio, a user's own llama.cpp, etc.).
+  /// Only processes whose executable is `llama-server` are killed — another
+  /// app listening on the port is left alone ([ensureStarted] then picks a
+  /// free port). Does not touch other ports (LM Studio, etc.).
   Future<void> reapStaleSidecar({int? exceptPid}) async {
     if (!DesktopPlatform.supportsSidecarRuntime) return;
     final skip = exceptPid ?? _process?.pid;
-    final listening = await _pidsListeningOnPort(_port);
-    final pids = <int>{...listening};
+    final candidates = <int>{...await _pidsListeningOnPort(_port)};
     final stored = await _readStoredPid();
-    if (stored != null &&
-        stored != skip &&
-        await _shouldReapPid(stored, listening)) {
-      pids.add(stored);
+    if (stored != null) candidates.add(stored);
+    final pids = <int>{};
+    for (final pid in candidates) {
+      if (skip != null && pid == skip) continue;
+      if (SidecarPort.commandIsLlamaServer(await _pidCommandName(pid))) {
+        pids.add(pid);
+      } else if (pid != stored) {
+        debugPrint('🖥️ DesktopRuntime: :$_port is held by pid=$pid '
+            '(not llama-server) — leaving it alone');
+      }
     }
     for (final pid in pids) {
-      if (skip != null && pid == skip) continue;
       debugPrint(
           '🖥️ DesktopRuntime: reaping stale sidecar pid=$pid on :$_port');
       Process.killPid(pid, ProcessSignal.sigterm);
@@ -341,17 +520,9 @@ class DesktopRuntimeManager extends ChangeNotifier {
     }
     await Future<void>.delayed(const Duration(milliseconds: 400));
     for (final pid in pids) {
-      if (skip != null && pid == skip) continue;
       Process.killPid(pid, ProcessSignal.sigkill);
     }
     if (skip == null) await _clearPidFile();
-  }
-
-  Future<bool> _shouldReapPid(int pid, Set<int> listening) async {
-    if (listening.contains(pid)) return true;
-    final comm = await _pidCommandName(pid);
-    if (comm == null) return true;
-    return comm.contains('llama-server');
   }
 
   Future<String?> _pidCommandName(int pid) async {
@@ -380,7 +551,8 @@ class DesktopRuntimeManager extends ChangeNotifier {
 
   Future<void> _notifyNativeSidecarPid(int pid) async {
     try {
-      await _trayChannel.invokeMethod('setSidecarPid', {'pid': pid});
+      await _trayChannel
+          .invokeMethod('setSidecarPid', {'pid': pid, 'port': _port});
     } catch (_) {}
   }
 
@@ -455,14 +627,28 @@ class DesktopRuntimeManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> _waitForHealth({required Duration timeout}) async {
-    final deadline = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(deadline)) {
-      if (_process == null) return false;
+  /// Polls `/health` until ready. Fails fast when [proc] exits; otherwise
+  /// waits [timeout] (scaled to the model size) and keeps going while the
+  /// server still logs load progress, up to [SidecarLoadTiming.hardCap].
+  Future<bool> _waitForHealth(Process proc, {required Duration timeout}) async {
+    final started = DateTime.now();
+    while (true) {
+      if (!identical(_process, proc)) return false;
       if (await _healthOk()) return true;
+      if (!identical(_process, proc)) return false;
+      final now = DateTime.now();
+      final last = _lastLogAt;
+      if (!SidecarLoadTiming.shouldKeepWaiting(
+        elapsed: now.difference(started),
+        timeout: timeout,
+        sinceLastLog: last == null ? null : now.difference(last),
+      )) {
+        debugPrint('🖥️ DesktopRuntime: not healthy after '
+            '${now.difference(started).inSeconds}s — giving up');
+        return false;
+      }
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
-    return false;
   }
 
   String? _siblingMmproj(String modelPath) {

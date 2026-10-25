@@ -8,12 +8,20 @@ import '../desktop_platform.dart';
 import '../runtime/desktop_runtime_manager.dart';
 import '../../models/lm_studio_model.dart';
 import '../../services/home_sync_service.dart';
+import '../../utils/home_lan.dart';
+import 'desktop_host_capabilities.dart';
 import 'desktop_relay_client.dart';
 
 /// Shared localhost HTTP proxy used by relay and USB host (Connect parity).
 class DesktopRequestProxy {
-  DesktopRequestProxy._();
+  DesktopRequestProxy._() {
+    // The runtime must not swap models under a phone's live generation.
+    DesktopRuntimeManager.instance.isBusy = () => isBusy;
+  }
   static final DesktopRequestProxy instance = DesktopRequestProxy._();
+
+  static const _lmStudioLoadPath = '/api/v1/models/load';
+  static const _lmStudioUnloadPath = '/api/v1/models/unload';
 
   /// Phone pairing / health probes that must not wait on sidecar boot.
   static const hostStatusPath = '/lm-mini/host-status';
@@ -26,6 +34,33 @@ class DesktopRequestProxy {
 
   static String _key(String channel, String id) => '$channel:$id';
 
+  /// No upstream bytes for this long ends a response that already started
+  /// (a hung backend). Reset by every chunk, and not counted while the relay
+  /// has the request paused (the phone is slow, not the backend).
+  @visibleForTesting
+  static Duration upstreamIdleTimeout = const Duration(minutes: 10);
+
+  /// Wait for the backend's response headers once the request is sent. The
+  /// built-in runtime's model load happens before this and is not counted.
+  @visibleForTesting
+  static Duration upstreamFirstByteTimeout = const Duration(minutes: 10);
+
+  /// Streaming chat to the built-in runtime: when the reply can't start
+  /// right away (model loading / switching, or a long prompt), send
+  /// `200 text/event-stream` plus `: loading` comments so Cloudflare
+  /// (~100 s without a byte → 524) and the phone keep waiting.
+  @visibleForTesting
+  static Duration keepAliveEvery = const Duration(seconds: 15);
+
+  /// Warm runtime: start the keep-alive only if the reply hasn't started
+  /// after this long (a quick answer or a quick error keeps its real status).
+  @visibleForTesting
+  static Duration keepAliveGrace = const Duration(seconds: 5);
+
+  /// Target kinds that get the loading keep-alive.
+  @visibleForTesting
+  static Set<String> keepAliveTargetKinds = {'lmMiniDesktop'};
+
   /// Aborts one in-flight request (phone pressed Stop or went away).
   void cancel(String id, {String channel = 'relay'}) {
     final key = _key(channel, id);
@@ -33,10 +68,31 @@ class DesktopRequestProxy {
     if (entry == null) return;
     _cancelled.add(key);
     debugPrint('🖥️ DesktopProxy: cancelled $key');
+    entry.keepAlive?.stop();
     // abort() destroys the socket even mid-response, so LM Studio / Ollama
     // see the disconnect and stop generating. close(force) alone did not.
     entry.request?.abort();
     entry.client?.close(force: true);
+    // A paused subscription would never see the abort: end the pipe here.
+    entry.stopPipe?.call(const SocketException('Cancelled'));
+  }
+
+  /// Relay flow control: the phone is reading slower than this machine
+  /// sends, so stop reading the backend for request [id] until [resume].
+  /// The backend is held back by TCP; nothing piles up in memory here.
+  void pause(String id, {String channel = 'relay'}) {
+    final entry = _inflight[_key(channel, id)];
+    if (entry == null || entry.paused) return;
+    entry.paused = true;
+    entry.subscription?.pause();
+  }
+
+  /// Undoes [pause].
+  void resume(String id, {String channel = 'relay'}) {
+    final entry = _inflight[_key(channel, id)];
+    if (entry == null || !entry.paused) return;
+    entry.paused = false;
+    entry.subscription?.resume();
   }
 
   /// Aborts every in-flight request on [channel] (its connection dropped).
@@ -52,6 +108,20 @@ class DesktopRequestProxy {
   @visibleForTesting
   int inflightCount({String channel = 'relay'}) =>
       _inflight.keys.where((k) => k.startsWith('$channel:')).length;
+
+  /// True while any phone request is talking to the built-in runtime
+  /// (relay or USB). Requests still waiting for the runtime to boot don't
+  /// count — only ones the sidecar is actually answering.
+  bool get isBusy => _inflight.values.any((e) => e.builtin && e.active);
+
+  Future<List<String>> _downloadedModels() async {
+    try {
+      return await DesktopRuntimeManager.instance.builtinModelLister?.call() ??
+          const <String>[];
+    } catch (_) {
+      return const <String>[];
+    }
+  }
 
   /// Resolve a target from path + `X-LM-Mini-Backend`, then stream the response
   /// via [send] using Connect wire frames (`response-start` / `chunk` / `end`).
@@ -124,29 +194,142 @@ class DesktopRequestProxy {
     bool stoppedEarly() {
       if (!_cancelled.remove(key)) return false;
       _inflight.remove(key);
+      entry.keepAlive?.stop();
       return true;
     }
+
+    final keepAlive = keepAliveTargetKinds.contains(target.kind) &&
+            isStreamingChatRequest(method, pathOnly, body, bodyEncoding)
+        ? LoadingKeepAlive(id: id, send: send, every: keepAliveEvery)
+        : null;
+    entry.keepAlive = keepAlive;
 
     var forwardPath = path.startsWith('/') ? path : '/$path';
     if (target.kind == 'lmMiniDesktop') {
       forwardPath = rewriteSidecarPath(forwardPath);
       final isProbe = _isSafeMethod(method) && isPairingProbePath(pathOnly);
       final runtime = DesktopRuntimeManager.instance;
-      if (isProbe && !runtime.isRunning) {
+      // Cold, or still loading (llama-server lists no models until healthy).
+      if (isProbe && (!runtime.isRunning || runtime.isStarting)) {
         _inflight.remove(key);
         unawaited(runtime.ensureBuiltinRunning());
         if (method == 'HEAD') {
           _sendEmpty(send, id, 200);
         } else {
-          _sendJson(send, id, 200, syntheticProbeBody(pathOnly));
+          // List the model the runtime is about to load (same id llama-server
+          // reports: its file path) so a phone that pairs while the Mac is
+          // cold doesn't get an empty model list.
+          String? coldModel = runtime.startingModelPath;
+          if (coldModel == null) {
+            try {
+              coldModel = await runtime.builtinModelResolver?.call();
+            } catch (_) {}
+          }
+          _sendJson(
+            send,
+            id,
+            200,
+            syntheticProbeBody(
+              pathOnly,
+              modelId: coldModel,
+              otherModelIds: await _downloadedModels(),
+            ),
+          );
+        }
+        return;
+      }
+      final requested = method == 'POST'
+          ? requestedModelOf(body, bodyEncoding)
+          : null;
+      final isLoad = method == 'POST' && pathOnly == _lmStudioLoadPath;
+      final isUnload = method == 'POST' && pathOnly == _lmStudioUnloadPath;
+      if (isUnload) {
+        _inflight.remove(key);
+        // llama-server has no unload; stop it unless a phone is mid-answer.
+        if (runtime.isServing) {
+          _sendJson(send, id, 409, {
+            'error': '${DesktopPlatform.thisMachine} is answering another '
+                'request. Try again when it finishes.',
+          });
+        } else {
+          final loaded = runtime.loadedModelPath;
+          await runtime.stop();
+          _sendJson(send, id, 200, {'instance_id': loaded ?? ''});
         }
         return;
       }
       if (!isProbe) {
-        final started = await runtime.ensureBuiltinRunning();
+        final available = await _downloadedModels();
+        final switchTo = modelSwitchTarget(
+          requested: requested,
+          loaded: runtime.loadedModelPath ?? runtime.startingModelPath,
+          available: available,
+          otherBusy: runtime.isServing,
+        );
+        if (isLoad && requested != null) {
+          final match = matchDownloadedModel(requested, available);
+          if (match == null) {
+            _inflight.remove(key);
+            _sendJson(send, id, 404, {
+              'error': 'Model is not downloaded on '
+                  '${DesktopPlatform.thisMachine}: $requested',
+            });
+            return;
+          }
+          if (switchTo == null &&
+              match != (runtime.loadedModelPath ?? runtime.startingModelPath) &&
+              runtime.isServing) {
+            _inflight.remove(key);
+            _sendJson(send, id, 409, {
+              'error': '${DesktopPlatform.thisMachine} is answering another '
+                  'request. Try again when it finishes.',
+            });
+            return;
+          }
+        }
+        // Cold start or model switch: this can take minutes, longer than
+        // Cloudflare waits for a first byte. Open the stream now.
+        if (switchTo != null || !runtime.isRunning || runtime.isStarting) {
+          keepAlive?.start();
+        } else {
+          keepAlive?.startAfter(keepAliveGrace);
+        }
+        var started = false;
+        if (switchTo != null) {
+          debugPrint('🖥️ DesktopProxy: phone asked for $switchTo — switching');
+          started = await runtime.ensureStarted(modelPath: switchTo);
+          // Another phone request grabbed the runtime meanwhile: answer with
+          // the loaded model instead of failing.
+          if (!started && !isLoad && runtime.isRunning) {
+            started = await runtime.ensureBuiltinRunning();
+          }
+        } else {
+          started = await runtime.ensureBuiltinRunning();
+        }
         if (stoppedEarly()) return;
+        if (isLoad) {
+          _inflight.remove(key);
+          if (started) {
+            _sendJson(send, id, 200, {
+              'type': 'llm',
+              'instance_id': runtime.loadedModelPath ?? requested ?? '',
+              'status': 'loaded',
+            });
+          } else {
+            _sendJson(send, id, 503, {
+              'error': runtime.lastError ?? 'Could not load the model.',
+            });
+          }
+          return;
+        }
         if (!started) {
           _inflight.remove(key);
+          if (keepAlive != null && keepAlive.stop()) {
+            // Headers are out: report the failure inside the stream.
+            keepAlive.finishWithError(runtime.lastError ??
+                'The model on ${DesktopPlatform.thisMachine} could not start.');
+            return;
+          }
           send({
             'type': 'response-error',
             'id': id,
@@ -175,13 +358,27 @@ class DesktopRequestProxy {
       headers['authorization'] = 'Bearer ${target.apiToken}';
     }
 
+    // Warm runtime / other backends with a keep-alive: a long prompt can
+    // also keep the first byte away for minutes.
+    if (keepAlive != null && !keepAlive.started && !keepAlive.scheduled) {
+      keepAlive.startAfter(keepAliveGrace);
+    }
+
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
+    // Only for pooled idle connections; the active response has its own
+    // idle timeout in [_pipe].
     client.idleTimeout = const Duration(minutes: 10);
     entry.client = client;
+    entry.builtin = target.kind == 'lmMiniDesktop';
+    entry.active = true;
+    // The runtime may have moved to a fallback port during the start.
+    final targetPort = entry.builtin
+        ? DesktopRuntimeManager.instance.port
+        : target.port;
 
     try {
-      final uri = Uri.parse('http://${target.host}:${target.port}$forwardPath');
+      final uri = Uri.parse('http://${target.host}:$targetPort$forwardPath');
       final req = await client.openUrl(method, uri);
       entry.request = req;
       if (_cancelled.contains(key)) req.abort();
@@ -199,7 +396,30 @@ class DesktopRequestProxy {
         }
       }
 
-      final res = await req.close().timeout(const Duration(minutes: 10));
+      final res = await req.close().timeout(upstreamFirstByteTimeout);
+      // The reply is here: no more loading comments. True when the stream
+      // is already open (status + headers were sent).
+      final streamOpen = keepAlive?.stop() ?? false;
+      if (streamOpen) {
+        if (res.statusCode != 200) {
+          final errBody = await _readCapped(res, 64 * 1024);
+          keepAlive!.finishWithError(
+            sseErrorMessage(res.statusCode, errBody),
+            upstreamBody: errBody,
+          );
+          return;
+        }
+        await _pipe<String>(
+          res.transform(const Utf8Decoder(allowMalformed: true)),
+          entry,
+          (text) {
+            if (text.isEmpty) return;
+            send({'type': 'response-chunk', 'id': id, 'data': text});
+          },
+        );
+        send({'type': 'response-end', 'id': id});
+        return;
+      }
       final responseHeaders = <String, String>{};
       res.headers.forEach((name, values) {
         final lower = name.toLowerCase();
@@ -207,9 +427,14 @@ class DesktopRequestProxy {
         responseHeaders[name] = values.join(',');
       });
 
-      final transformModels = target.kind == 'lmMiniDesktop' &&
+      final toLmStudioV1 = target.kind == 'lmMiniDesktop' &&
           method == 'GET' &&
           needsLmStudioModelsTransform(pathOnly);
+      // Every downloaded GGUF, not just the loaded one, so the phone can pick.
+      final transformModels = toLmStudioV1 ||
+          (target.kind == 'lmMiniDesktop' &&
+              method == 'GET' &&
+              pathOnly == '/v1/models');
 
       if (transformModels) {
         final chunks = <int>[];
@@ -220,11 +445,16 @@ class DesktopRequestProxy {
         if (res.statusCode == 200) {
           try {
             final decoded = jsonDecode(payload);
-            if (decoded is Map<String, dynamic>) {
+            if (decoded is Map<String, dynamic> && !toLmStudioV1) {
+              payload = jsonEncode(mergeDownloadedModels(
+                decoded,
+                await _downloadedModels(),
+              ));
+            } else if (decoded is Map<String, dynamic>) {
               bool? propsVision;
               try {
                 final propsReq = await client.getUrl(
-                  Uri.parse('http://${target.host}:${target.port}/props'),
+                  Uri.parse('http://${target.host}:$targetPort/props'),
                 );
                 final propsRes =
                     await propsReq.close().timeout(const Duration(seconds: 2));
@@ -239,7 +469,7 @@ class DesktopRequestProxy {
                 }
               } catch (_) {}
               payload = jsonEncode(openaiModelsToLmStudioV1(
-                decoded,
+                mergeDownloadedModels(decoded, await _downloadedModels()),
                 visionFromProps: propsVision,
               ));
             }
@@ -280,28 +510,37 @@ class DesktopRequestProxy {
           path.startsWith('/tts/');
 
       if (isBinary) {
-        await for (final chunk in res) {
+        await _pipe<List<int>>(res, entry, (chunk) {
           send({
             'type': 'response-chunk',
             'id': id,
             'data': base64Encode(chunk),
             'encoding': 'base64',
           });
-        }
+        });
       } else {
         // Streaming decoder: an emoji or CJK character split across two
         // TCP chunks must not turn into two U+FFFD halves.
-        await for (final text
-            in res.transform(const Utf8Decoder(allowMalformed: true))) {
-          if (text.isEmpty) continue;
-          send({'type': 'response-chunk', 'id': id, 'data': text});
-        }
+        await _pipe<String>(
+          res.transform(const Utf8Decoder(allowMalformed: true)),
+          entry,
+          (text) {
+            if (text.isEmpty) return;
+            send({'type': 'response-chunk', 'id': id, 'data': text});
+          },
+        );
       }
       send({'type': 'response-end', 'id': id});
     } catch (e) {
       // Stopped from the phone: the relay already dropped this request.
       if (_cancelled.contains(key)) return;
       debugPrint('🖥️ DesktopProxy: ${target.kind} error $e');
+      if (keepAlive != null && keepAlive.stop()) {
+        // The phone already has a 200 event stream: end it with an error
+        // event it shows, instead of a dropped connection.
+        keepAlive.finishWithError(_friendlyBackendError(target.kind, e));
+        return;
+      }
       send({
         'type': 'response-error',
         'id': id,
@@ -309,10 +548,159 @@ class DesktopRequestProxy {
         'error': _friendlyBackendError(target.kind, e),
       });
     } finally {
+      keepAlive?.stop();
       _inflight.remove(key);
       _cancelled.remove(key);
       client.close(force: true);
     }
+  }
+
+  /// Forwards [source] through [onData], honouring relay `pause` / `resume`
+  /// and failing after [upstreamIdleTimeout] without a chunk (paused time
+  /// excluded). Completes when the source ends; errors with its error.
+  Future<void> _pipe<T>(
+    Stream<T> source,
+    _Inflight entry,
+    void Function(T data) onData,
+  ) {
+    final done = Completer<void>();
+    Timer? idle;
+    late final StreamSubscription<T> sub;
+    void finish([Object? error, StackTrace? st]) {
+      idle?.cancel();
+      if (done.isCompleted) return;
+      entry.subscription = null;
+      entry.stopPipe = null;
+      if (error == null) {
+        done.complete();
+      } else {
+        done.completeError(error, st);
+      }
+    }
+
+    void arm() {
+      idle?.cancel();
+      idle = Timer(upstreamIdleTimeout, () {
+        if (done.isCompleted) return;
+        if (entry.paused) {
+          arm();
+          return;
+        }
+        unawaited(sub.cancel());
+        finish(TimeoutException('No upstream data', upstreamIdleTimeout));
+      });
+    }
+
+    sub = source.listen(
+      (data) {
+        arm();
+        onData(data);
+      },
+      onError: finish,
+      onDone: finish,
+      cancelOnError: true,
+    );
+    entry.subscription = sub;
+    entry.stopPipe = (error) {
+      unawaited(sub.cancel());
+      finish(error);
+    };
+    if (entry.paused) sub.pause();
+    arm();
+    return done.future;
+  }
+
+  static Future<String> _readCapped(Stream<List<int>> res, int cap) async {
+    final bytes = <int>[];
+    try {
+      await for (final chunk in res.timeout(const Duration(seconds: 30))) {
+        final room = cap - bytes.length;
+        if (room <= 0) continue;
+        bytes.addAll(chunk.length <= room ? chunk : chunk.sublist(0, room));
+      }
+    } catch (_) {}
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  static const _chatStreamPaths = {
+    '/v1/chat/completions',
+    '/chat/completions',
+  };
+
+  /// A phone chat request that will be answered as SSE (`"stream": true` to
+  /// an OpenAI chat path), so a 200 `text/event-stream` can be opened before
+  /// the backend answers.
+  ///
+  /// LM Studio `/api/v1/chat` is left out on purpose: llama-server answers
+  /// it 404 and the phone then retries on `/v1/chat/completions`. That
+  /// fallback needs the real status, which an open stream would hide.
+  static bool isStreamingChatRequest(
+    String method,
+    String path,
+    Object? body,
+    String? bodyEncoding,
+  ) {
+    if (method != 'POST') return false;
+    if (!_chatStreamPaths.contains(pathOnlyOf(path))) return false;
+    try {
+      String? text;
+      if (body is String && body.isNotEmpty) {
+        text = bodyEncoding == 'base64'
+            ? utf8.decode(base64Decode(body), allowMalformed: true)
+            : body;
+      } else if (body is List) {
+        text = utf8.decode(body.cast<int>(), allowMalformed: true);
+      }
+      if (text == null || !text.trimLeft().startsWith('{')) return false;
+      final decoded = jsonDecode(text);
+      return decoded is Map && decoded['stream'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Phone-facing message for a backend that answered [status] with [body]
+  /// after the stream was already opened.
+  static String sseErrorMessage(int status, String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        final err = decoded['error'];
+        if (err is Map && err['message'] != null) {
+          return err['message'].toString();
+        }
+        if (err is String && err.isNotEmpty) return err;
+        if (decoded['message'] != null) return decoded['message'].toString();
+      }
+    } catch (_) {}
+    final text = body.trim();
+    if (text.isNotEmpty && text.length <= 500) return text;
+    return 'The model server on ${DesktopPlatform.thisMachine} answered '
+        'HTTP $status.';
+  }
+
+  /// OpenAI-style SSE error event. Keeps the backend's own error `type`
+  /// (e.g. llama.cpp `exceed_context_size_error`) so the phone can still
+  /// recognise it; otherwise `runtime_error`.
+  static String sseErrorEvent(String message, {String? upstreamBody}) {
+    final error = <String, dynamic>{
+      'message': message,
+      'type': 'runtime_error',
+    };
+    if (upstreamBody != null) {
+      try {
+        final decoded = jsonDecode(upstreamBody);
+        final err = decoded is Map ? decoded['error'] : null;
+        if (err is Map) {
+          for (final e in err.entries) {
+            error.putIfAbsent(e.key.toString(), () => e.value);
+          }
+          final type = err['type'];
+          if (type is String && type.isNotEmpty) error['type'] = type;
+        }
+      } catch (_) {}
+    }
+    return 'data: ${jsonEncode({'error': error})}\n\n';
   }
 
   /// Turns a raw socket exception into a phone-facing message that names the
@@ -337,7 +725,19 @@ class DesktopRequestProxy {
       return '$label isn\'t running on ${DesktopPlatform.thisMachine}. '
           'Start it (or turn it off in Share with phone), then try again.';
     }
+    if (e is TimeoutException) {
+      return '$label stopped responding on ${DesktopPlatform.thisMachine} '
+          '(no data for ${_humanDuration(e.duration)}).';
+    }
     return '$label not reachable: $e';
+  }
+
+  static String _humanDuration(Duration? d) {
+    if (d == null) return 'a long time';
+    if (d.inMinutes >= 1) {
+      return '${d.inMinutes} minute${d.inMinutes == 1 ? '' : 's'}';
+    }
+    return '${d.inSeconds} s';
   }
 
   DesktopProxyTarget? resolveTarget(
@@ -530,7 +930,9 @@ class DesktopRequestProxy {
   static Map<String, dynamic> hostStatusPayload(DesktopRelayBackends backends) {
     final reachable = <String, bool>{...backends.reachable};
     if (backends.advertiseBuiltin) {
-      reachable['lmMiniDesktop'] = reachable['lmMiniDesktop'] ?? true;
+      // The host sets this from "a GGUF is downloaded and the runtime binary
+      // exists" — never assume it can serve.
+      reachable.putIfAbsent('lmMiniDesktop', () => false);
     }
     if (backends.advertiseLmStudio) {
       reachable.putIfAbsent('lmStudio', () => false);
@@ -561,6 +963,14 @@ class DesktopRequestProxy {
       'reachable': reachable,
       'kokoroReady': backends.kokoroEnabled,
       'runtimeRunning': DesktopRuntimeManager.instance.isRunning,
+      'connectVersion': desktopHostVersion,
+      'capabilities': desktopHostCapabilities,
+      // Direct Wi‑Fi: phones that know these fields try the LAN first
+      // (certificate pinned to the fingerprint); older phones ignore them.
+      // An empty list tells a new phone the direct path is off right now.
+      kLanJsonKey: backends.lanUrls,
+      if (backends.lanFingerprint?.isNotEmpty ?? false)
+        kLanFingerprintJsonKey: backends.lanFingerprint,
     };
   }
 
@@ -575,8 +985,13 @@ class DesktopRequestProxy {
     return names;
   }
 
-  static Map<String, dynamic> syntheticProbeBody(String path) {
+  static Map<String, dynamic> syntheticProbeBody(
+    String path, {
+    String? modelId,
+    List<String> otherModelIds = const [],
+  }) {
     final p = pathOnlyOf(path);
+    final hasModel = modelId != null && modelId.isNotEmpty;
     if (p == hostStatusPath) {
       return {
         'ok': true,
@@ -585,10 +1000,93 @@ class DesktopRequestProxy {
       };
     }
     if (p == '/health') return {'status': 'ok'};
+    final openai = mergeDownloadedModels(<String, dynamic>{
+      'object': 'list',
+      'data': <dynamic>[
+        if (hasModel) {'id': modelId, 'object': 'model', 'owned_by': 'llamacpp'},
+      ],
+    }, otherModelIds);
     if (p == '/api/v1/models' || p == '/api/v0/models') {
-      return {'models': <dynamic>[]};
+      return (openai['data'] as List).isNotEmpty
+          ? openaiModelsToLmStudioV1(openai)
+          : {'models': <dynamic>[]};
     }
-    return {'object': 'list', 'data': <dynamic>[]};
+    return openai;
+  }
+
+  /// Appends downloaded GGUFs llama-server doesn't list (it only reports the
+  /// loaded one) as `status: unloaded`. Ids are full file paths — the same id
+  /// llama-server uses — so the phone can name one in a chat request.
+  static Map<String, dynamic> mergeDownloadedModels(
+    Map<String, dynamic> openai,
+    List<String> downloaded,
+  ) {
+    final data = openai['data'];
+    final list = data is List ? List<dynamic>.from(data) : <dynamic>[];
+    final have = <String>{
+      for (final item in list)
+        if (item is Map && item['id'] != null) item['id'].toString(),
+    };
+    for (final path in downloaded) {
+      if (path.isEmpty || have.contains(path)) continue;
+      have.add(path);
+      list.add({
+        'id': path,
+        'object': 'model',
+        'owned_by': 'llamacpp',
+        'status': {'value': 'unloaded'},
+      });
+    }
+    return {...openai, 'object': openai['object'] ?? 'list', 'data': list};
+  }
+
+  /// The downloaded path [requested] names: exact path, else same file name.
+  static String? matchDownloadedModel(String? requested, List<String> paths) {
+    final r = requested?.trim();
+    if (r == null || r.isEmpty) return null;
+    if (paths.contains(r)) return r;
+    String base(String s) => s.split(RegExp(r'[\\/]')).last.toLowerCase();
+    final name = base(r);
+    for (final p in paths) {
+      if (base(p) == name) return p;
+    }
+    return null;
+  }
+
+  /// Which model to (re)start the sidecar with for a phone request naming
+  /// [requested], or `null` to use what is loaded. Never switches while
+  /// another phone request is being answered ([otherBusy]).
+  static String? modelSwitchTarget({
+    required String? requested,
+    required String? loaded,
+    required List<String> available,
+    required bool otherBusy,
+  }) {
+    final match = matchDownloadedModel(requested, available);
+    if (match == null || match == loaded) return null;
+    if (otherBusy && loaded != null) return null;
+    return match;
+  }
+
+  /// `model` from an OpenAI / LM Studio JSON request body, if any.
+  static String? requestedModelOf(Object? body, String? bodyEncoding) {
+    try {
+      String? text;
+      if (body is String && body.isNotEmpty) {
+        text = bodyEncoding == 'base64'
+            ? utf8.decode(base64Decode(body), allowMalformed: true)
+            : body;
+      } else if (body is List) {
+        text = utf8.decode(body.cast<int>(), allowMalformed: true);
+      }
+      if (text == null || !text.trimLeft().startsWith('{')) return null;
+      final decoded = jsonDecode(text);
+      if (decoded is! Map) return null;
+      final m = decoded['model'];
+      return m is String && m.trim().isNotEmpty ? m.trim() : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Convert llama-server `/v1/models` JSON to LM Studio V1 `{models:[{key}]}`.
@@ -618,7 +1116,10 @@ class DesktopRequestProxy {
         if (item is! Map) continue;
         final id = item['id']?.toString();
         if (id == null || id.isEmpty) continue;
-        final vision = visionFromProps ??
+        final status = item['status'];
+        final unloaded = status is Map && status['value'] == 'unloaded';
+        // /props describes the loaded model only.
+        final vision = (unloaded ? null : visionFromProps) ??
             (capById[id]?.contains('vision') == true ||
                 capById[id]?.contains('multimodal') == true);
         models.add({
@@ -629,9 +1130,11 @@ class DesktopRequestProxy {
           'format': 'gguf',
           'quantization': <String, dynamic>{},
           'capabilities': {'vision': vision},
-          'loaded_instances': [
-            {'id': '0', 'config': <String, dynamic>{}},
-          ],
+          'loaded_instances': unloaded
+              ? <dynamic>[]
+              : [
+                  {'id': '0', 'config': <String, dynamic>{}},
+                ],
         });
       }
       return {'models': models};
@@ -679,6 +1182,99 @@ class DesktopRequestProxy {
 class _Inflight {
   HttpClient? client;
   HttpClientRequest? request;
+
+  /// The upstream body being forwarded (paused by relay flow control).
+  StreamSubscription<dynamic>? subscription;
+  void Function(Object error)? stopPipe;
+  bool paused = false;
+  LoadingKeepAlive? keepAlive;
+
+  /// Targets the built-in llama-server.
+  bool builtin = false;
+
+  /// Upstream request opened (past any runtime start wait).
+  bool active = false;
+}
+
+/// Opens a `200 text/event-stream` reply before the backend answers and
+/// sends `: loading` SSE comments every [every] until [stop]. SSE clients
+/// ignore comment lines; the bytes keep Cloudflare and the phone waiting.
+class LoadingKeepAlive {
+  LoadingKeepAlive({
+    required this.id,
+    required this.send,
+    required this.every,
+  });
+
+  static const comment = ': loading\n\n';
+
+  final String id;
+  final void Function(Map<String, dynamic> frame) send;
+  final Duration every;
+
+  Timer? _grace;
+  Timer? _ticker;
+  bool _started = false;
+  bool _stopped = false;
+
+  /// Headers + first comment went out.
+  bool get started => _started;
+
+  /// [startAfter] is pending.
+  bool get scheduled => _grace != null;
+
+  void start() {
+    _grace?.cancel();
+    _grace = null;
+    if (_started || _stopped) return;
+    _started = true;
+    send({
+      'type': 'response-start',
+      'id': id,
+      'status': 200,
+      'headers': {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+    });
+    _comment();
+    _ticker = Timer.periodic(every, (_) => _comment());
+  }
+
+  void startAfter(Duration delay) {
+    if (_started || _stopped || _grace != null) return;
+    _grace = Timer(delay, start);
+  }
+
+  void _comment() {
+    if (_stopped) return;
+    send({'type': 'response-chunk', 'id': id, 'data': comment});
+  }
+
+  /// Stops the comments. Returns whether the stream was opened ([started]).
+  bool stop() {
+    _stopped = true;
+    _grace?.cancel();
+    _grace = null;
+    _ticker?.cancel();
+    _ticker = null;
+    return _started;
+  }
+
+  /// Ends an opened stream with an OpenAI-style error event and `[DONE]`.
+  void finishWithError(String message, {String? upstreamBody}) {
+    stop();
+    final event = DesktopRequestProxy.sseErrorEvent(
+      message,
+      upstreamBody: upstreamBody,
+    );
+    send({
+      'type': 'response-chunk',
+      'id': id,
+      'data': '${event}data: [DONE]\n\n',
+    });
+    send({'type': 'response-end', 'id': id});
+  }
 }
 
 class DesktopProxyTarget {

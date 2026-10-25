@@ -4936,7 +4936,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get premiumOnDeviceLlmDescription =>
-      'El chat en el dispositivo es gratis con modelos iniciales curados. Pro desbloquea descargas del catálogo por encima de 2B parámetros e importar tus propios modelos GGUF o MLX desde Hugging Face — totalmente sin conexión.';
+      'El chat en el dispositivo es gratis con modelos iniciales curados. Pro desbloquea descargas del catálogo por encima de 3B parámetros e importar tus propios modelos GGUF o MLX desde Hugging Face — totalmente sin conexión.';
 
   @override
   String get premiumHfBrowse => 'Importación de Hugging Face';
@@ -7792,4 +7792,70 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get teaserBackupDemoRestored => 'Chats restaurados';
+
+  @override
+  String get teaserHfTitle => 'Ejecuta cualquier modelo de Hugging Face';
+
+  @override
+  String get teaserHfPoint1 =>
+      'Busca entre miles de modelos GGUF. Explorar es gratis.';
+
+  @override
+  String get teaserHfPoint2 =>
+      'Elige el tamaño que cabe en tu móvil; comprobamos que funcione.';
+
+  @override
+  String get teaserHfPoint3 => 'Descárgalo una vez y chatea sin conexión.';
+
+  @override
+  String get teaserHfDemoFits => 'Cabe';
+
+  @override
+  String get teaserHfDemoReady => 'Listo sin conexión';
+
+  @override
+  String get teaserMemoryTitle => 'Chats que te recuerdan';
+
+  @override
+  String get teaserMemoryPoint1 =>
+      'Dilo una vez: tu nombre, tu dieta, tu proyecto actual.';
+
+  @override
+  String get teaserMemoryPoint2 => 'Cada chat nuevo ya sabe lo que importa.';
+
+  @override
+  String get teaserMemoryPoint3 =>
+      'Guardado en este dispositivo. Ve, edita o borra cualquier recuerdo.';
+
+  @override
+  String get teaserMemoryDemoTell => 'Soy vegetariano y vivo en Lisboa.';
+
+  @override
+  String get teaserMemoryDemoFact1 => 'Vegetariano';
+
+  @override
+  String get teaserMemoryDemoFact2 => 'Vive en Lisboa';
+
+  @override
+  String get teaserMemoryDemoNewChat => 'Chat nuevo';
+
+  @override
+  String get teaserMemoryDemoAsk => '¿Ideas para cenar hoy?';
+
+  @override
+  String get teaserMemoryDemoReply =>
+      'Aquí tienes 3 sitios vegetarianos en Lisboa…';
+
+  @override
+  String get chatUnavailable => 'Este chat ya no está disponible.';
+
+  @override
+  String get chatUnavailableBack => 'Volver a los chats';
+
+  @override
+  String get connectionSecurity => 'Seguridad de la conexión';
+
+  @override
+  String get connectionSecuritySubtitle =>
+      'Cifrado en tránsito (HTTPS). Los chats pasan por el relay de LM Mini y no tienen cifrado de extremo a extremo.';
 }

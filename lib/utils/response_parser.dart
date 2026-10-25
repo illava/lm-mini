@@ -71,6 +71,9 @@ class ResponseParser {
     caseSensitive: false,
   );
 
+  static final RegExp _bareCloseThinkPattern =
+      RegExp(r'</think>|</thinking>', caseSensitive: false);
+
   static final RegExp _closeThinkPattern = RegExp(
     r'</think>|</thinking>|</reason>|</reasoning>|'
     r'\[/think\]|\[/thinking\]|'
@@ -190,6 +193,21 @@ class ResponseParser {
         answer: cleanedAnswer,
         thinking: thinking.isEmpty ? null : thinking,
       );
+    }
+
+    // 0b) Closing tag with no opening one: the chat template put `<think>`
+    // in the prompt (Qwen 3.5, DeepSeek R1 distills), so the reply starts
+    // mid-thought. Everything before `</think>` is thinking.
+    if (openThinkMatch == null) {
+      final close = _bareCloseThinkPattern.firstMatch(trimmed);
+      if (close != null) {
+        final thinking = trimmed.substring(0, close.start).trim();
+        final answer = trimmed.substring(close.end).trim();
+        return ParsedResponse(
+          answer: _extractAnswerOrFallback(answer),
+          thinking: thinking.isEmpty ? null : thinking,
+        );
+      }
     }
 
     // 1a) Gemma 4: <|channel>thought … <channel|> answer

@@ -38,6 +38,9 @@ class PickableModel {
   /// Highlighted as a good fit for this device.
   final bool isRecommended;
 
+  /// Needs Pro to download (free users see a Pro tag).
+  final bool isProLocked;
+
   /// Brand/family for grouped browsing (Qwen, Meta, Google, …).
   final String? familyGroup;
 
@@ -75,6 +78,7 @@ class PickableModel {
     this.isPinned = false,
     this.isLoading = false,
     this.isRecommended = false,
+    this.isProLocked = false,
     this.familyGroup,
     this.sizeLabel,
     this.typeLabel,

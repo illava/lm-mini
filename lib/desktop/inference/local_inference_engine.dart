@@ -59,10 +59,13 @@ class LocalInferenceEngine {
     String? systemPrompt,
     String? memoryContext,
     List<String>? imageUrls,
+    String? sessionKey,
   }) {
     // Apple's built-in model (no download); same chat flow as GGUF / MLX.
+    // [sessionKey] (the conversation id) keeps its session between messages.
     if (settings.activeProviderKind == 'appleIntelligence') {
       return AppleIntelligenceEndpoint().streamChat(
+        sessionKey: sessionKey,
         history: history,
         userMessage: userMessage,
         systemPrompt: systemPrompt,
@@ -139,10 +142,9 @@ class LocalInferenceEngine {
       '🖥️ LocalInferenceEngine: desktop sidecar id=${spec.id} path=$modelPath',
     );
 
-    final started = await _runtime.ensureStarted(
-      modelPath: modelPath,
-      contextSize: OnDeviceLLMService.onDeviceContextCap,
-    );
+    // Runtime default (16k, 8k on 8 GB Macs): the same sidecar also serves
+    // phones, which send longer chats than the in-process fllama cap.
+    final started = await _runtime.ensureStarted(modelPath: modelPath);
     if (!started) {
       debugPrint(
         '🖥️ Sidecar failed (${_runtime.lastError}) — falling back to fllama',

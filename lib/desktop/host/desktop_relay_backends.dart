@@ -30,6 +30,8 @@ class DesktopRelayBackends {
     this.advertiseJan = false,
     this.advertiseUnsloth = false,
     this.reachable = const {},
+    this.lanUrls = const [],
+    this.lanFingerprint,
   });
 
   final String lmStudioHost;
@@ -64,6 +66,13 @@ class DesktopRelayBackends {
   /// Live reachability keyed by phone backend id (`lmMiniDesktop`, `lmStudio`, …).
   final Map<String, bool> reachable;
 
+  /// Direct Wi‑Fi endpoints (`https://192.168.x.x:8743`) advertised in
+  /// `/lm-mini/host-status`. Empty while the direct server is off.
+  final List<String> lanUrls;
+
+  /// SHA-256 hex of the direct Wi‑Fi certificate (phones pin it).
+  final String? lanFingerprint;
+
   bool get hasA1111 => a1111Host.trim().isNotEmpty;
   bool get hasComfyUi => comfyUiHost.trim().isNotEmpty;
 
@@ -97,6 +106,8 @@ class DesktopRelayBackends {
     bool? advertiseJan,
     bool? advertiseUnsloth,
     Map<String, bool>? reachable,
+    List<String>? lanUrls,
+    String? lanFingerprint,
   }) {
     return DesktopRelayBackends(
       lmStudioHost: lmStudioHost ?? this.lmStudioHost,
@@ -128,6 +139,8 @@ class DesktopRelayBackends {
       advertiseJan: advertiseJan ?? this.advertiseJan,
       advertiseUnsloth: advertiseUnsloth ?? this.advertiseUnsloth,
       reachable: reachable ?? this.reachable,
+      lanUrls: lanUrls ?? this.lanUrls,
+      lanFingerprint: lanFingerprint ?? this.lanFingerprint,
     );
   }
 }

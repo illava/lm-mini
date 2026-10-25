@@ -7,11 +7,19 @@
 //   • MethodChannel("lm_mini/apple_ai")
 //       availability → {available: Bool, reason: String?}
 //       isAvailable  → Bool
-//       cancel       → stops the running reply
+//       cancel       → stops the running reply (and drops the chat session)
+//       prewarm      {sessionKey?} → load the model ahead of a request
+//       resetSession → forget the chat session
 //   • EventChannel ("lm_mini/apple_ai/stream")
-//       args {prompt, instructions?, maxTokens, temperature}
+//       args {prompt, instructions?, maxTokens, temperature,
+//             sessionKey?, mode: "fresh" | "continue"}
 //       events: text deltas (String), then end of stream; errors as
 //       FlutterError(code: "apple_ai_*", message: user-facing text).
+//
+// Sessions: one LanguageModelSession is kept for the open chat
+// (sessionKey). "continue" sends only the new message on it, so the model
+// doesn't re-read the history every turn; "fresh" starts a new session
+// from the packed history. No sessionKey = a one-off session (titles).
 
 #if os(iOS)
 import Flutter
@@ -49,6 +57,13 @@ final class AppleIntelligenceBridge: NSObject {
     case "cancel":
       streamHandler.cancel()
       result(nil)
+    case "prewarm":
+      let args = call.arguments as? [String: Any] ?? [:]
+      streamHandler.prewarm(sessionKey: args["sessionKey"] as? String)
+      result(nil)
+    case "resetSession":
+      streamHandler.resetSession()
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -80,10 +95,38 @@ final class AppleIntelligenceBridge: NSObject {
 
 final class AppleIntelligenceStreamHandler: NSObject, FlutterStreamHandler {
   private var task: Task<Void, Never>?
+  /// The open chat's session (type-erased: FoundationModels is iOS 26+).
+  private var chatSession: AnyObject?
+  private var chatSessionKey: String?
+  /// Session warmed before the user hits Send; adopted by the next request.
+  private var warmSession: AnyObject?
 
   func cancel() {
     task?.cancel()
     task = nil
+    // A cut-off reply leaves the transcript half-written: start over next time.
+    resetSession()
+  }
+
+  func resetSession() {
+    chatSession = nil
+    chatSessionKey = nil
+  }
+
+  func prewarm(sessionKey: String?) {
+    #if canImport(FoundationModels)
+    if #available(iOS 26.0, macOS 26.0, *) {
+      guard case .available = SystemLanguageModel.default.availability else { return }
+      if let key = sessionKey, key == chatSessionKey,
+         let session = chatSession as? LanguageModelSession {
+        session.prewarm()
+        return
+      }
+      let session = LanguageModelSession()
+      session.prewarm()
+      warmSession = session
+    }
+    #endif
   }
 
   func onListen(withArguments arguments: Any?,
@@ -93,6 +136,8 @@ final class AppleIntelligenceStreamHandler: NSObject, FlutterStreamHandler {
     let instructions = (args["instructions"] as? String) ?? ""
     let maxTokens = (args["maxTokens"] as? NSNumber)?.intValue ?? 1024
     let temperature = (args["temperature"] as? NSNumber)?.doubleValue ?? 0.7
+    let sessionKey = args["sessionKey"] as? String
+    let continuing = (args["mode"] as? String) == "continue"
 
     func send(_ value: Any?) {
       DispatchQueue.main.async { events(value) }
@@ -101,11 +146,35 @@ final class AppleIntelligenceStreamHandler: NSObject, FlutterStreamHandler {
     #if canImport(FoundationModels)
     if #available(iOS 26.0, macOS 26.0, *) {
       task?.cancel()
-      task = Task {
-        do {
-          let session = instructions.isEmpty
+      let session: LanguageModelSession
+      if continuing {
+        guard let key = sessionKey, key == chatSessionKey,
+              let existing = chatSession as? LanguageModelSession else {
+          // Dart falls back to a fresh session with the packed history.
+          return FlutterError(
+            code: "apple_ai_session_lost",
+            message: "Apple Intelligence session ended.",
+            details: nil)
+        }
+        session = existing
+      } else {
+        if instructions.isEmpty, let warm = warmSession as? LanguageModelSession {
+          session = warm
+        } else {
+          session = instructions.isEmpty
             ? LanguageModelSession()
             : LanguageModelSession(instructions: instructions)
+        }
+        warmSession = nil
+        if let key = sessionKey {
+          chatSession = session
+          chatSessionKey = key
+        } else {
+          // One-off (e.g. a chat title): don't disturb the chat's session.
+        }
+      }
+      task = Task {
+        do {
           let options = GenerationOptions(
             temperature: temperature,
             maximumResponseTokens: maxTokens)
@@ -127,6 +196,14 @@ final class AppleIntelligenceStreamHandler: NSObject, FlutterStreamHandler {
         } catch is CancellationError {
           send(FlutterEndOfEventStream)
         } catch let error as LanguageModelSession.GenerationError {
+          if case .exceededContextWindowSize = error {
+            // Dart retries once with a fresh session from packed history.
+            send(FlutterError(
+              code: "apple_ai_context",
+              message: Self.message(for: error),
+              details: nil))
+            return
+          }
           send(FlutterError(
             code: "apple_ai_generation",
             message: Self.message(for: error),

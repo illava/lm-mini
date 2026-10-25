@@ -13,6 +13,17 @@ abstract final class LmsMcpError {
   static const sandboxUserMessage =
       'Code Sandbox is temporarily unavailable. Please try again in a moment.';
 
+  /// LM Studio refuses per-request MCPs (server setting off, or the API
+  /// token lacks MCP permission). Retrying won't help.
+  static const perRequestMcpsOffMessage =
+      'LM Studio blocked Pro Search / Code Sandbox. In LM Studio, open '
+      'Developer → Server Settings and turn on "Allow per-request MCPs". '
+      'If you use an API token, allow it to use MCPs too.';
+
+  /// "Permission denied to use ephemeral MCP server …" (HTTP 403).
+  static bool isPerRequestMcpsBlocked(Object? error) =>
+      _lower(error).contains('permission denied to use ephemeral mcp');
+
   static const proToolsUserMessage =
       'Pro tools (Search / Sandbox) are temporarily unavailable. Please try again in a moment.';
 
@@ -188,6 +199,7 @@ abstract final class LmsMcpError {
     if (isUnrecognizedPlugin(error, errorType: errorType)) {
       return unrecognizedUserMessageFor(error, lmStudio: lmStudio);
     }
+    if (isPerRequestMcpsBlocked(error)) return perRequestMcpsOffMessage;
     final msg = _text(error);
     final name = remoteServerName(error);
     final nameLower = name?.toLowerCase() ?? '';

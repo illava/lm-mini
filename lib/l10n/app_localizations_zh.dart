@@ -4689,7 +4689,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get premiumOnDeviceLlmDescription =>
-      '通过精选的入门模型，可以免费进行设备上聊天。 Pro 解锁超过 2B 参数的目录下载，并从 Hugging Face 导入您自己的 GGUF 或 MLX 模型 - 浏览、选择量化并完全离线运行。';
+      '通过精选的入门模型，可以免费进行设备上聊天。 Pro 解锁超过 3B 参数的目录下载，并从 Hugging Face 导入您自己的 GGUF 或 MLX 模型 - 浏览、选择量化并完全离线运行。';
 
   @override
   String get premiumHfBrowse => '拥抱脸部导入';
@@ -7364,4 +7364,65 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get teaserBackupDemoRestored => '聊天已恢复';
+
+  @override
+  String get teaserHfTitle => '运行 Hugging Face 上的任意模型';
+
+  @override
+  String get teaserHfPoint1 => '搜索数千个 GGUF 模型，浏览免费。';
+
+  @override
+  String get teaserHfPoint2 => '选择适合你手机的大小，我们会检查能否运行。';
+
+  @override
+  String get teaserHfPoint3 => '下载一次，之后完全离线聊天。';
+
+  @override
+  String get teaserHfDemoFits => '适合';
+
+  @override
+  String get teaserHfDemoReady => '可离线使用';
+
+  @override
+  String get teaserMemoryTitle => '记得你的聊天';
+
+  @override
+  String get teaserMemoryPoint1 => '只需说一次：你的名字、饮食习惯、正在做的项目。';
+
+  @override
+  String get teaserMemoryPoint2 => '每个新聊天都已了解重要信息。';
+
+  @override
+  String get teaserMemoryPoint3 => '保存在此设备上。可随时查看、编辑或删除任何记忆。';
+
+  @override
+  String get teaserMemoryDemoTell => '我吃素，住在里斯本。';
+
+  @override
+  String get teaserMemoryDemoFact1 => '素食';
+
+  @override
+  String get teaserMemoryDemoFact2 => '住在里斯本';
+
+  @override
+  String get teaserMemoryDemoNewChat => '新聊天';
+
+  @override
+  String get teaserMemoryDemoAsk => '今晚吃什么？';
+
+  @override
+  String get teaserMemoryDemoReply => '这里有 3 家里斯本的素食餐厅…';
+
+  @override
+  String get chatUnavailable => '此聊天已不存在。';
+
+  @override
+  String get chatUnavailableBack => '返回聊天列表';
+
+  @override
+  String get connectionSecurity => '连接安全';
+
+  @override
+  String get connectionSecuritySubtitle =>
+      '传输过程中已加密（HTTPS）。聊天会经过 LM Mini 中继，并非端到端加密。';
 }

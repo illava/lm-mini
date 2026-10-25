@@ -238,13 +238,20 @@ class ChatProvider with ChangeNotifier {
         availableModels: _activeSettingsProvider?.availableModels,
       );
 
-  /// LM Studio REST (`/api/v1/chat` and `/v1/chat/completions`). Home
-  /// (`lmMiniDesktop`) speaks the same API. Ollama / oMLX / cloud must never
-  /// fall through to this path.
+  /// LM Studio connection settings (server URL, token, relay): LM Studio and
+  /// LM Mini Home. Only LM Studio has `/api/v1/chat`; see [isHomeHost].
+  /// Ollama / oMLX / cloud must never fall through to this path.
   bool _usesLmStudioChatApi(AppSettings settings) {
     final kind = settings.activeProviderKind;
     return kind == 'lmStudio' || kind == 'lmMiniDesktop';
   }
+
+  /// LM Mini Home (the Mac's built-in llama-server). It shares LM Studio's
+  /// connection settings but only speaks the OpenAI API: no `/api/v1/chat`
+  /// (stateful chat, MCP integrations, Pro Search MCP). Chats go to
+  /// `/v1/chat/completions`, with Pro tools run by the app like Ollama.
+  static bool isHomeHost(AppSettings settings) =>
+      settings.activeProviderKind == 'lmMiniDesktop';
 
   /// Ollama, oMLX, Jan, and paid cloud providers. Always stay on that backend —
   /// even when Tool Use is off or the model cannot take tools.
@@ -308,6 +315,7 @@ class ChatProvider with ChangeNotifier {
       return;
     }
     final lmStudioStateful = _usesLmStudioChatApi(settings) &&
+        !isHomeHost(settings) &&
         !(settings.enableToolUse && _modelSupportsTools(settings));
     if (lmStudioStateful && !_usesCloudOrLocalOpenAiBackend(settings)) {
       await _sendMessageStateful(
@@ -2084,10 +2092,40 @@ class ChatProvider with ChangeNotifier {
       }
     } catch (e) {
       _error = 'Failed to load conversations: $e';
+    } finally {
+      if (!silent) _isLoading = false;
     }
-
-    if (!silent) _isLoading = false;
     notifyListeners();
+  }
+
+  /// After a sync wrote to the database: show the open chat's new state
+  /// without a spinner (replies made on the other device appeared only after
+  /// reopening the chat, and the next send used stale context). Skipped while
+  /// a reply is being generated.
+  Future<void> refreshOpenChatFromStore() async {
+    final current = _currentConversation;
+    if (current == null || isGenerationInFlight || _isLoading) return;
+    try {
+      final stored = conversationById(current.id);
+      if (stored == null) return; // deleted: the chat screen handles it
+      final messages =
+          await _databaseService.getMessagesForConversation(current.id);
+      if (_currentConversation?.id != current.id || isGenerationInFlight) {
+        return;
+      }
+      final same = messages.length == _currentMessages.length &&
+          [
+            for (var i = 0; i < messages.length; i++)
+              messages[i].id == _currentMessages[i].id &&
+                  messages[i].content == _currentMessages[i].content,
+          ].every((ok) => ok);
+      if (same) return;
+      _currentConversation = stored;
+      _currentMessages = messages;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('refreshOpenChatFromStore: $e');
+    }
   }
 
   bool _sameConversationList(
@@ -2181,6 +2219,7 @@ class ChatProvider with ChangeNotifier {
       if (messages.isNotEmpty) continue;
       await _databaseService.deleteConversation(conversation.id);
       _conversations.removeWhere((c) => c.id == conversation.id);
+      unawaited(ICloudSyncService().forgetConversation(conversation.id));
     }
   }
 
@@ -2384,6 +2423,9 @@ class ChatProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
+    // Always clear the loading flag: a chat that vanished mid-open (deleted,
+    // pruned draft, sync) used to return early and leave every screen on a
+    // spinner until the app was restarted.
     try {
       var conversation = conversationById(conversationId);
       if (conversation == null) {
@@ -2408,10 +2450,10 @@ class ChatProvider with ChangeNotifier {
       _sessionWarm = _currentConversation!.lastResponseId != null;
     } catch (e) {
       _error = 'Failed to load conversation: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-
-    _isLoading = false;
-    notifyListeners();
   }
 
   /// Create a branch (fork) from a specific message in the current conversation.
@@ -3159,9 +3201,27 @@ class ChatProvider with ChangeNotifier {
   bool _omitLoadParamsForModel(String modelId) =>
       _activeSettingsProvider?.shouldOmitLoadParamsInChat(modelId) ?? false;
 
+  static const homeWaitingStatus =
+      'Waiting for your Mac (it may be loading the model)...';
+
   /// Show the loading banner immediately when chat will JIT-load the model.
   /// V1 SSE upgrades this to a percent; V0 stays indeterminate until tokens.
   void _beginPendingModelLoadIfNeeded(AppSettings settings) {
+    if (isHomeHost(settings)) {
+      // The phone can't see whether the Mac's model is loaded; if nothing
+      // comes back for a few seconds, say why instead of "Sending request".
+      final conversationId = _currentConversation?.id;
+      Timer(const Duration(seconds: 4), () {
+        if (!_isSendingMessage ||
+            _currentConversation?.id != conversationId ||
+            _streamingStatus != 'Sending request...') {
+          return;
+        }
+        _setStreamingStatus(homeWaitingStatus);
+        notifyListeners();
+      });
+      return;
+    }
     if (settings.activeProviderKind != 'lmStudio') return;
     final id = settings.selectedModel ?? '';
     if (id.isEmpty || _omitLoadParamsForModel(id)) return;
@@ -3356,6 +3416,7 @@ class ChatProvider with ChangeNotifier {
       String content, AppSettings settings, List<String>? imageUrls,
       {String? userDisplayContent, String? memoryContext}) async {
     if (!_usesLmStudioChatApi(settings) ||
+        isHomeHost(settings) ||
         _usesCloudOrLocalOpenAiBackend(settings)) {
       await _sendMessageWithTools(
         content,
@@ -4226,6 +4287,9 @@ class ChatProvider with ChangeNotifier {
         _resolveEffectiveCloudProvider(settings: settings);
     final isCloudRouted = effectiveCloudProvider != null ||
         SettingsProvider.isCloudProviderKind(settings.activeProviderKind);
+    // Home can't run LM Studio MCP integrations: Pro tools run in the app.
+    final isHome = isHomeHost(settings);
+    final noLmsIntegrations = isCloudRouted || isHome;
     final modelAllowsTools = _modelSupportsTools(settings);
     final toolsEnabled = settings.enableToolUse && modelAllowsTools;
 
@@ -4244,7 +4308,7 @@ class ChatProvider with ChangeNotifier {
         !settings.useMcpToolsOnly;
 
     final hasMcpIntegrations = toolsEnabled &&
-        !isCloudRouted &&
+        !noLmsIntegrations &&
         !isSearxngSearch &&
         (settings.activeMcpServers.isNotEmpty ||
             settings.activeIntegratedMcps.isNotEmpty);
@@ -4392,10 +4456,10 @@ class ChatProvider with ChangeNotifier {
       // suppress local web_search/read_url tools. On Ollama / cloud routes,
       // Pro Search uses the client-side tool loop (PremiumToolDelegate).
       final proSearchUsesMcp = _proProSearchUsesMcp(
-          isProSearch: isProSearch, isCloudRouted: isCloudRouted);
+          isProSearch: isProSearch, isCloudRouted: noLmsIntegrations);
       final isCodeSandbox = _proIsCodeSandboxActive(settings);
       final codeSandboxUsesMcp =
-          _proCodeSandboxUsesMcp(settings, isCloudRouted: isCloudRouted);
+          _proCodeSandboxUsesMcp(settings, isCloudRouted: noLmsIntegrations);
       final effectiveWebSearch =
           (isProSearch && proSearchUsesMcp) ? false : settings.enableWebSearch;
       // Client-side run_code when sandbox is on but V1 MCP is not (Ollama/cloud).
@@ -4600,7 +4664,7 @@ class ChatProvider with ChangeNotifier {
         final proSearchIntegrations = await _proBuildEphemeralIntegrations(
           settings: settings,
           isProSearch: isProSearch,
-          isCloudRouted: isCloudRouted,
+          isCloudRouted: noLmsIntegrations,
           onAuthFailed: (message) {
             _setStreamingStatus(message);
             notifyListeners();
@@ -4700,7 +4764,7 @@ class ChatProvider with ChangeNotifier {
               omitLoadParams:
                   _omitLoadParamsForModel(settings.selectedModel ?? ''),
             );
-          } else if (useV1Fallback) {
+          } else if (useV1Fallback && !isHome) {
             // V1 API — fallback after V0 failed to produce response with
             // search results. Messages have been rewritten as plain
             // system+user (no tool_calls/tool roles). Use fresh session.
@@ -4717,7 +4781,7 @@ class ChatProvider with ChangeNotifier {
               omitLoadParams:
                   _omitLoadParamsForModel(settings.selectedModel ?? ''),
             );
-          } else if (hasUserFacingTools || forceV0) {
+          } else if (hasUserFacingTools || forceV0 || isHome) {
             // V0 API — user-facing tools (web_search, read_url) need
             // OpenAI-compatible function calling format.
             // Also used when retrying after empty tool response (forceV0)
@@ -7149,6 +7213,7 @@ class ChatProvider with ChangeNotifier {
 
       unawaited(
           HomeSyncService.instance.rememberDeletedConversation(conversationId));
+      unawaited(ICloudSyncService().forgetConversation(conversationId));
       notifyListeners();
     } catch (e) {
       _error = 'Failed to delete conversation: $e';
@@ -7682,6 +7747,7 @@ class ChatProvider with ChangeNotifier {
         ),
         memoryContext: memoryContext,
         imageUrls: imageUrls,
+        sessionKey: originConversationId,
       )) {
         if (_shouldCancelGeneration) {
           OnDeviceLLMService.instance.cancelActive();

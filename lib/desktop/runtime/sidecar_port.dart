@@ -29,6 +29,27 @@ abstract final class SidecarPort {
     return pids;
   }
 
+  /// Whether `ps -p PID -o comm=` (macOS/Linux: full executable path) or a
+  /// `tasklist /FO CSV /NH` row (Windows) names the bundled `llama-server`.
+  ///
+  /// Used before killing whatever listens on the sidecar port: another app
+  /// (or the user's own server) may own it, and that must never be killed.
+  static bool commandIsLlamaServer(String? raw) {
+    if (raw == null) return false;
+    var text = raw.trim();
+    if (text.isEmpty) return false;
+    // Windows CSV: "llama-server.exe","1234","Console","1","12,345 K"
+    if (text.startsWith('"')) {
+      final end = text.indexOf('"', 1);
+      text = end > 1 ? text.substring(1, end) : text.substring(1);
+    }
+    text = text.split('\n').first.trim();
+    final slash = text.lastIndexOf(RegExp(r'[\\/]'));
+    var name = (slash >= 0 ? text.substring(slash + 1) : text).toLowerCase();
+    if (name.endsWith('.exe')) name = name.substring(0, name.length - 4);
+    return name == 'llama-server';
+  }
+
   static bool _localAddressHasPort(String line, int port) {
     // "TCP 127.0.0.1:8741 0.0.0.0:0 LISTENING 1234"
     final match = RegExp(

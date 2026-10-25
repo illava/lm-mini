@@ -81,4 +81,77 @@ void main() {
       expect(p, isNot(contains('old ')));
     });
   });
+
+  group('AppleIntelligenceEndpoint session reuse', () {
+    final history = [
+      _m('1', 'user', 'What is 2+2?'),
+      _m('2', 'assistant', '4'),
+      _m('3', 'user', 'And 3+3?'),
+    ];
+
+    setUp(() => AppleIntelligenceEndpoint.debugSetLive(
+          'chat-1',
+          'Be brief.',
+          AppleIntelligenceEndpoint.debugSignature(history),
+          200,
+        ));
+
+    bool can({
+      String? key = 'chat-1',
+      List<ChatMessage>? h,
+      String instructions = 'Be brief.',
+      int reply = 512,
+    }) =>
+        AppleIntelligenceEndpoint.canContinue(
+          sessionKey: key,
+          history: h ?? history,
+          instructions: instructions,
+          userMessage: 'And 3+3?',
+          replyTokens: reply,
+        );
+
+    test('continues when the session saw exactly this chat', () {
+      expect(can(), isTrue);
+    });
+
+    test('fresh for another chat, no key, or new instructions', () {
+      expect(can(key: 'chat-2'), isFalse);
+      expect(can(key: null), isFalse);
+      expect(can(instructions: 'Be detailed.'), isFalse);
+    });
+
+    test('fresh after an edit or a regenerated reply', () {
+      expect(
+        can(h: [
+          _m('1', 'user', 'What is 2+2?'),
+          _m('2', 'assistant', 'Four.'),
+          _m('3', 'user', 'And 3+3?'),
+        ]),
+        isFalse,
+      );
+      expect(can(h: [_m('3', 'user', 'And 3+3?')]), isFalse);
+    });
+
+    test('fresh when the context window is nearly full', () {
+      AppleIntelligenceEndpoint.debugSetLive(
+        'chat-1',
+        'Be brief.',
+        AppleIntelligenceEndpoint.debugSignature(history),
+        3600,
+      );
+      expect(can(), isFalse);
+    });
+
+    test('whitespace differences do not break the match', () {
+      expect(
+        can(h: [
+          _m('1', 'user', 'What is  2+2? '),
+          _m('2', 'assistant', '4\n'),
+          _m('3', 'user', 'And 3+3?'),
+        ]),
+        isTrue,
+      );
+    });
+  });
 }
+

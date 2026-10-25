@@ -33,3 +33,30 @@ bool shouldRepinToLatest({
 }) {
   return autoScrollEnabled && !userScrolled && !isPinnedToLatest(pixels);
 }
+
+/// "Follow new replies" off: how far to move the reverse list so the view
+/// stays still while the newest reply grows. In a `reverse: true` list the
+/// bottom edge is the anchor, so a growing reply pushes everything above it
+/// up — the latest words stay in view whatever the setting. Shifting by the
+/// growth keeps what the user is reading in place.
+///
+/// Returns 0 (don't move) when following is on, nothing is streaming, a
+/// message was added or removed (keep the normal jump to new messages), or
+/// the framework already corrected the offset by itself.
+double holdViewShift({
+  required bool autoScrollEnabled,
+  required bool streaming,
+  required bool sameMessageCount,
+  required double previousMaxExtent,
+  required double maxExtent,
+  required double previousPixels,
+  required double pixels,
+}) {
+  if (autoScrollEnabled || !streaming || !sameMessageCount) return 0;
+  final grew = maxExtent - previousMaxExtent;
+  if (grew <= 0.5) return 0;
+  // Already compensated (e.g. offscreen growth corrected by the sliver).
+  if ((pixels - previousPixels).abs() > 0.5) return 0;
+  return grew;
+}
+

@@ -362,6 +362,44 @@ class ImageGenerationService {
 
   // ── txt2img ────────────────────────────────────────────────────────
 
+  /// Image settings are shared with ComfyUI, and loading a ComfyUI workflow
+  /// copies its seed, sampler and scheduler in. A1111 / Forge can't take a
+  /// 64-bit ComfyUI seed or a sampler it doesn't have (HTTP 500), so:
+  /// - seeds are folded into A1111's 32-bit range (-1 stays random),
+  /// - a sampler / scheduler this server doesn't list is dropped so the
+  ///   server uses its default.
+  @visibleForTesting
+  static Map<String, dynamic> sanitizeForA1111(
+    Map<String, dynamic> json, {
+    List<SDSampler> samplers = const [],
+    List<SDScheduler> schedulers = const [],
+  }) {
+    final out = Map<String, dynamic>.from(json);
+    final seed = out['seed'];
+    if (seed is int) {
+      if (seed < -1) {
+        out['seed'] = -1;
+      } else if (seed > 0xFFFFFFFF) {
+        out['seed'] = seed % 0x100000000;
+      }
+    }
+    final sampler = (out['sampler_name'] as String?)?.trim().toLowerCase();
+    if (sampler != null && sampler.isNotEmpty && samplers.isNotEmpty) {
+      final known = samplers.any((s) =>
+          s.name.toLowerCase() == sampler ||
+          s.aliases.any((a) => a.toLowerCase() == sampler));
+      if (!known) out.remove('sampler_name');
+    }
+    final scheduler = (out['scheduler'] as String?)?.trim().toLowerCase();
+    if (scheduler != null && scheduler.isNotEmpty && schedulers.isNotEmpty) {
+      final known = schedulers.any((s) =>
+          s.name.toLowerCase() == scheduler ||
+          s.label.toLowerCase() == scheduler);
+      if (!known) out.remove('scheduler');
+    }
+    return out;
+  }
+
   /// Generate an image. Returns the decoded image bytes.
   /// Calls [onProgress] periodically if provided.
   Future<GeneratedImage> generateImage(
@@ -386,11 +424,24 @@ class ImageGenerationService {
       }
 
       final allHeaders = {'Content-Type': 'application/json', ...?headers};
+      // Lists are normally loaded by Image settings; a chat in a fresh
+      // session may generate first.
+      if (_samplers.isEmpty && _schedulers.isEmpty) {
+        await Future.wait([
+          _fetchSamplers(serverUrl, headers: headers),
+          _fetchSchedulers(serverUrl, headers: headers),
+        ]);
+      }
+      final body = sanitizeForA1111(
+        params.toJson(),
+        samplers: _samplers,
+        schedulers: _schedulers,
+      );
       final res = await _client
           .post(
             Uri.parse('$serverUrl/sdapi/v1/txt2img'),
             headers: allHeaders,
-            body: jsonEncode(params.toJson()),
+            body: jsonEncode(body),
           )
           .timeout(const Duration(minutes: 10));
 

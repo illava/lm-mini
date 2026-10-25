@@ -256,17 +256,6 @@ List<SettingsNavGroup> buildSettingsNavTree(
       ],
     ),
     SettingsNavGroup(
-      id: SettingsNavId.support,
-      label: _stripSectionCase(l10n.supportSection),
-      leaves: [
-        SettingsNavLeaf(
-          id: SettingsNavId.supportFeatureRequests,
-          label: l10n.featureRequests,
-          kind: SettingsNavKind.screen,
-        ),
-      ],
-    ),
-    SettingsNavGroup(
       id: SettingsNavId.data,
       label: _stripSectionCase(l10n.dataSection),
       leaves: [
@@ -345,6 +334,17 @@ List<SettingsNavGroup> buildSettingsNavTree(
             label: _stripSectionCase(l10n.lmMiniProSection),
             kind: SettingsNavKind.screen,
           ),
+      ],
+    ),
+    SettingsNavGroup(
+      id: SettingsNavId.support,
+      label: _stripSectionCase(l10n.supportSection),
+      leaves: [
+        SettingsNavLeaf(
+          id: SettingsNavId.supportFeatureRequests,
+          label: l10n.featureRequests,
+          kind: SettingsNavKind.screen,
+        ),
       ],
     ),
   ];

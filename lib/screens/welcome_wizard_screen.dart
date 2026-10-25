@@ -222,7 +222,7 @@ class _WelcomeWizardScreenState extends State<WelcomeWizardScreen> {
       ));
       return;
     }
-    if (!SubscriptionService().isPremium && !spec.isFreeSlot) {
+    if (!SubscriptionService().isPremium && !LocalModelCatalog.isFreeTier(spec)) {
       // Public builds have no upgrade path; free-slot picks are offered instead.
       if (!ProFeatures.showUpsell) return;
       if (!mounted) return;

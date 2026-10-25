@@ -13,6 +13,7 @@ PickableModel mapOnDeviceModel({
   DeviceCapability? cap,
   DeviceCapabilityService? capability,
   bool isRecommended = false,
+  bool isProLocked = false,
   bool isFocused = false,
   bool isLoading = false,
   bool compactQuantName = false,
@@ -88,7 +89,8 @@ PickableModel mapOnDeviceModel({
     ModelDetailRow('Vision', spec.supportsVision ? 'Yes' : 'No'),
     ModelDetailRow('Tool calls', spec.supportsToolCalls ? 'Yes' : 'No'),
     if (spec.isImported) const ModelDetailRow('Source', 'Imported'),
-    if (spec.isFreeSlot) const ModelDetailRow('Plan', 'Free slot'),
+    ModelDetailRow(
+        'Plan', LocalModelCatalog.isFreeTier(spec) ? 'Free' : 'Pro'),
   ];
 
   // All / Downloaded filters: anything on-device shares "downloaded".
@@ -114,6 +116,7 @@ PickableModel mapOnDeviceModel({
     isSelected: activeLocalId == spec.id || isFocused,
     isLoading: isLoading,
     isRecommended: isRecommended,
+    isProLocked: isProLocked,
     familyGroup: compactQuantName
         ? LocalModelCatalog.modelLine(spec)
         : LocalModelCatalog.familyGroup(spec),

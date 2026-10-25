@@ -263,11 +263,23 @@ class DatabaseService {
 
   Future<void> updateConversation(ChatConversation conversation) async {
     final db = await database;
+    // Never move updated_at backwards: message edits bump it in the DB
+    // (see [_touchConversation]) and an older in-memory copy written back
+    // later must not undo that, or sync would let the stale side win.
+    final current = await db.query(
+      _conversationsTable,
+      columns: ['updated_at'],
+      where: 'id = ?',
+      whereArgs: [conversation.id],
+    );
+    final storedAt =
+        current.isEmpty ? 0 : (current.first['updated_at'] as int? ?? 0);
+    final nextAt = conversation.updatedAt.millisecondsSinceEpoch;
     await db.update(
       _conversationsTable,
       {
         'title': conversation.title,
-        'updated_at': conversation.updatedAt.millisecondsSinceEpoch,
+        'updated_at': nextAt > storedAt ? nextAt : storedAt,
         'message_ids': jsonEncode(conversation.messageIds),
         'settings': jsonEncode(conversation.settings),
         'folder_id': conversation.folderId,
@@ -475,6 +487,75 @@ class DatabaseService {
     });
   }
 
+  /// One cheap fingerprint per conversation's messages (count, newest
+  /// time, total size of the fields that change) so sync can tell which
+  /// chats changed without loading every message.
+  Future<Map<String, String>> messageFingerprints() async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT conversation_id AS cid,
+             COUNT(*) AS n,
+             MAX(timestamp) AS t,
+             SUM(LENGTH(content)) AS c,
+             SUM(LENGTH(IFNULL(generated_image_paths, ''))) AS g,
+             SUM(LENGTH(IFNULL(alternatives, ''))) AS a,
+             SUM(IFNULL(alternative_index, 0)) AS ai,
+             SUM(LENGTH(IFNULL(stats, ''))) AS s
+      FROM $_messagesTable
+      GROUP BY conversation_id
+    ''');
+    return {
+      for (final r in rows)
+        r['cid'] as String:
+            '${r['n']}|${r['t']}|${r['c']}|${r['g']}|${r['a']}|${r['ai']}|${r['s']}',
+    };
+  }
+
+  /// Marks a chat as changed now, so a message edit or delete wins when the
+  /// chat is merged by sync (Home / iCloud pick the newer `updated_at`).
+  Future<void> _touchConversation(Database db, String? conversationId) async {
+    if (conversationId == null || conversationId.isEmpty) return;
+    await db.update(
+      _conversationsTable,
+      {'updated_at': DateTime.now().millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: [conversationId],
+    );
+  }
+
+  Future<String?> _conversationIdOfMessage(Database db, String messageId) async {
+    final rows = await db.query(
+      _messagesTable,
+      columns: ['conversation_id'],
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+    return rows.isEmpty ? null : rows.first['conversation_id'] as String?;
+  }
+
+  /// Sync: drop this chat's messages the winning side no longer has
+  /// (deleted or regenerated there). Does not touch `updated_at`.
+  Future<int> deleteMessagesNotIn(
+    String conversationId,
+    Set<String> keepIds,
+  ) async {
+    final db = await database;
+    final rows = await db.query(
+      _messagesTable,
+      columns: ['id'],
+      where: 'conversation_id = ?',
+      whereArgs: [conversationId],
+    );
+    var removed = 0;
+    for (final r in rows) {
+      final id = r['id'] as String;
+      if (keepIds.contains(id)) continue;
+      await db.delete(_messagesTable, where: 'id = ?', whereArgs: [id]);
+      removed++;
+    }
+    return removed;
+  }
+
   Future<ChatMessage?> getMessage(String messageId) async {
     final db = await database;
     final maps = await db.query(
@@ -522,8 +603,14 @@ class DatabaseService {
     return items;
   }
 
-  Future<void> deleteMessage(String messageId) async {
+  Future<void> deleteMessage(
+    String messageId, {
+    bool touchConversation = true,
+  }) async {
     final db = await database;
+    final conversationId = touchConversation
+        ? await _conversationIdOfMessage(db, messageId)
+        : null;
     // Fetch image paths before deleting so we can clean up files
     final maps = await db.query(
       _messagesTable,
@@ -547,6 +634,7 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [messageId],
     );
+    await _touchConversation(db, conversationId);
   }
 
   /// Writes generated-image paths even if that message is not in the open
@@ -588,7 +676,10 @@ class DatabaseService {
     }
   }
 
-  Future<void> updateMessage(ChatMessage message) async {
+  Future<void> updateMessage(
+    ChatMessage message, {
+    bool touchConversation = true,
+  }) async {
     final db = await database;
     await db.update(
       _messagesTable,
@@ -626,6 +717,10 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [message.id],
     );
+    if (touchConversation) {
+      await _touchConversation(
+          db, await _conversationIdOfMessage(db, message.id));
+    }
   }
 
   Future<void> deleteMessagesAfterTimestamp(
@@ -636,6 +731,7 @@ class DatabaseService {
       where: 'conversation_id = ? AND timestamp >= ?',
       whereArgs: [conversationId, timestamp],
     );
+    await _touchConversation(db, conversationId);
   }
 
   Future<void> clearAllData() async {

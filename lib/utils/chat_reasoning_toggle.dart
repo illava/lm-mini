@@ -38,9 +38,7 @@ class ChatReasoningToggle {
     LMStudioModel? Function(String modelId)? resolveLmStudioModel,
   }) {
     final kind = settings.activeProviderKind;
-    if (kind == 'onDeviceGguf' ||
-        kind == 'onDeviceMlx' ||
-        kind == 'appleIntelligence') {
+    if (kind == 'onDeviceMlx' || kind == 'appleIntelligence') {
       return false;
     }
 
@@ -52,6 +50,10 @@ class ChatReasoningToggle {
           availableModels: availableModels,
           resolveLmStudioModel: resolveLmStudioModel,
         );
+
+    // On-device GGUF: the engine passes Think to the model's chat template
+    // (enable_thinking), so thinking models get the toggle too.
+    if (kind == 'onDeviceGguf') return looksLike();
 
     // Home sidecar, native Ollama, and oMLX send think / enable_thinking.
     // Do not wait for CloudApiType.supportsReasoningEffort (GPT-5 / o-series).

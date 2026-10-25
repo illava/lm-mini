@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -20,6 +21,10 @@ class DesktopTrayService {
   static const _channel = MethodChannel('lm_mini/desktop_tray');
 
   bool _initialized = false;
+
+  /// Called when macOS wakes from sleep (native `NSWorkspace.didWake`).
+  /// Set by the host so it re-checks the relay and the runtime.
+  Future<void> Function()? onSystemWake;
 
   bool get _supported =>
       DesktopPlatform.supportsHostMode &&
@@ -71,8 +76,64 @@ class DesktopTrayService {
     }
   }
 
+  /// Holds (or releases) a `PreventUserIdleSystemSleep` power assertion so
+  /// the Mac keeps answering phones while idle. The display can still sleep.
+  /// Lid-close sleep is not prevented. macOS only; no-op elsewhere.
+  Future<void> setPreventSleep(bool enabled) async {
+    if (!_supported || !Platform.isMacOS) return;
+    try {
+      await _channel.invokeMethod('setPreventSleep', {
+        'enabled': enabled,
+        'reason': 'LM Mini is sharing models with your phone',
+      });
+    } catch (e) {
+      debugPrint('🖥️ DesktopTray: setPreventSleep failed: $e');
+    }
+  }
+
+  /// `enabled`, `notRegistered`, `requiresApproval`, `notFound`, or
+  /// `unsupported` (pre-macOS 13 / not macOS / channel missing).
+  Future<String> launchAtLoginStatus() async {
+    if (!_supported || !Platform.isMacOS) return 'unsupported';
+    try {
+      final status = await _channel.invokeMethod<String>('getLaunchAtLogin');
+      return status ?? 'unsupported';
+    } catch (e) {
+      debugPrint('🖥️ DesktopTray: getLaunchAtLogin failed: $e');
+      return 'unsupported';
+    }
+  }
+
+  /// Registers / unregisters the app as a login item (`SMAppService.mainApp`).
+  /// Returns the resulting status (see [launchAtLoginStatus]).
+  Future<String> setLaunchAtLogin(bool enabled) async {
+    if (!_supported || !Platform.isMacOS) return 'unsupported';
+    try {
+      final status = await _channel
+          .invokeMethod<String>('setLaunchAtLogin', {'enabled': enabled});
+      return status ?? 'unsupported';
+    } on PlatformException catch (e) {
+      debugPrint('🖥️ DesktopTray: setLaunchAtLogin failed: ${e.message}');
+      return await launchAtLoginStatus();
+    } catch (e) {
+      debugPrint('🖥️ DesktopTray: setLaunchAtLogin failed: $e');
+      return 'unsupported';
+    }
+  }
+
+  /// Opens System Settings › General › Login Items (approval needed).
+  Future<void> openLoginItemsSettings() async {
+    if (!_supported || !Platform.isMacOS) return;
+    try {
+      await _channel.invokeMethod('openLoginItemsSettings');
+    } catch (_) {}
+  }
+
   Future<void> _handleCall(MethodCall call) async {
     switch (call.method) {
+      case 'systemDidWake':
+        final handler = onSystemWake;
+        if (handler != null) unawaited(handler());
       case 'showWindow':
         // Native already ordered the window front.
         break;

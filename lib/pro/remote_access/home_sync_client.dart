@@ -13,8 +13,8 @@ extension _ProHomeSyncClient on HomeSyncService {
   Future<bool> _proSyncNow() async => false;
 
   Future<bool> _proApplySnapshot(
-    HomeSyncSnapshot before,
-    HomeSyncSnapshot merged,
-  ) async =>
+    HomeSyncSnapshot merged, {
+    Set<String>? touched,
+  }) async =>
       false;
 }

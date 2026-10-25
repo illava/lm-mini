@@ -124,6 +124,7 @@ class ModelRow extends StatelessWidget {
                                   ),
                                 ],
                                 if (model.isRecommended ||
+                                    model.isProLocked ||
                                     model.isLoaded ||
                                     model.isLoading ||
                                     showNotLoaded ||
@@ -141,6 +142,12 @@ class ModelRow extends StatelessWidget {
                                           label: l10n.modelRecommended,
                                           icon: Icons.auto_awesome_rounded,
                                           color: cs.primary,
+                                        ),
+                                      if (model.isProLocked)
+                                        const _StatusPill(
+                                          label: 'Pro',
+                                          icon: Icons.workspace_premium_rounded,
+                                          color: Color(0xFFF5A623),
                                         ),
                                       if (model.isLoading)
                                         _StatusPill(

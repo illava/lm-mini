@@ -24,6 +24,26 @@ class HomeSyncTombstone {
   }
 }
 
+/// One picture / attachment carried in a sync body. [path] is relative to
+/// the app documents directory (see [HomeSyncFiles.sanitize]).
+class HomeSyncFile {
+  const HomeSyncFile({required this.path, required this.data});
+
+  final String path;
+
+  /// File bytes, base64.
+  final String data;
+
+  Map<String, dynamic> toJson() => {'path': path, 'data': data};
+
+  static HomeSyncFile? tryParse(Map<String, dynamic> json) {
+    final path = json['path'];
+    final data = json['data'];
+    if (path is! String || data is! String || data.isEmpty) return null;
+    return HomeSyncFile(path: path, data: data);
+  }
+}
+
 class HomeSyncConversation {
   const HomeSyncConversation({
     required this.conversation,
@@ -144,7 +164,85 @@ class HomeSyncSnapshot {
     this.syncPersonaIds = const [],
     this.personasEnabled = false,
     this.personasUpdatedAt,
+    this.known,
+    this.deletedPersonas = const [],
+    this.deletedMemories = const [],
+    this.files = const [],
+    this.wantFiles = const [],
+    this.unavailableFiles = const [],
+    this.fileSync = false,
   });
+
+  /// Persona memories deleted (or replaced by an edit) on either device,
+  /// keyed by [HomeSyncMerge.memoryKey]. Older hosts ignore this field.
+  final List<HomeSyncTombstone> deletedMemories;
+
+  /// Pictures / attachments referenced by chats in this body that the other
+  /// device may not have. Older hosts ignore this field.
+  final List<HomeSyncFile> files;
+
+  /// Relative paths this device is missing and asks the other to send.
+  final List<String> wantFiles;
+
+  /// Asked-for paths the sender doesn't have (or won't send: too big), so the
+  /// asker stops asking.
+  final List<String> unavailableFiles;
+
+  /// The sender understands [files] / [wantFiles]. Lets each side skip
+  /// sending bytes to an older device that would drop them.
+  final bool fileSync;
+
+  /// Personas deleted on either device (so the other doesn't bring them
+  /// back). Older hosts ignore this field.
+  final List<HomeSyncTombstone> deletedPersonas;
+
+  /// Phone → Mac: what the phone already has (`id → manifest entry`, see
+  /// [HomeSyncManifest]). A host that understands it answers with only the
+  /// chats that differ; an older host ignores it and sends everything.
+  final Map<String, String>? known;
+
+  /// Same snapshot with a different chat list (host: send only changes).
+  HomeSyncSnapshot withConversations(List<HomeSyncConversation> items) =>
+      HomeSyncSnapshot(
+        folders: folders,
+        conversations: items,
+        deletedConversations: deletedConversations,
+        deletedFolders: deletedFolders,
+        personaCatalog: personaCatalog,
+        personas: personas,
+        syncPersonaIds: syncPersonaIds,
+        personasEnabled: personasEnabled,
+        personasUpdatedAt: personasUpdatedAt,
+        deletedPersonas: deletedPersonas,
+        deletedMemories: deletedMemories,
+        fileSync: fileSync,
+      );
+
+  /// Same snapshot carrying file transfer fields (replacing any present).
+  HomeSyncSnapshot withFiles({
+    List<HomeSyncFile> files = const [],
+    List<String> wantFiles = const [],
+    List<String> unavailableFiles = const [],
+    bool fileSync = true,
+  }) =>
+      HomeSyncSnapshot(
+        folders: folders,
+        conversations: conversations,
+        deletedConversations: deletedConversations,
+        deletedFolders: deletedFolders,
+        personaCatalog: personaCatalog,
+        personas: personas,
+        syncPersonaIds: syncPersonaIds,
+        personasEnabled: personasEnabled,
+        personasUpdatedAt: personasUpdatedAt,
+        known: known,
+        deletedPersonas: deletedPersonas,
+        deletedMemories: deletedMemories,
+        files: files,
+        wantFiles: wantFiles,
+        unavailableFiles: unavailableFiles,
+        fileSync: fileSync,
+      );
 
   final List<ChatFolder> folders;
   final List<HomeSyncConversation> conversations;
@@ -168,6 +266,15 @@ class HomeSyncSnapshot {
         'personasEnabled': personasEnabled,
         if (personasUpdatedAt != null)
           'personasUpdatedAt': personasUpdatedAt!.toIso8601String(),
+        if (known != null) 'known': known,
+        if (deletedPersonas.isNotEmpty)
+          'deletedPersonas': deletedPersonas.map((t) => t.toJson()).toList(),
+        if (deletedMemories.isNotEmpty)
+          'deletedMemories': deletedMemories.map((t) => t.toJson()).toList(),
+        if (files.isNotEmpty) 'files': files.map((f) => f.toJson()).toList(),
+        if (wantFiles.isNotEmpty) 'wantFiles': wantFiles,
+        if (unavailableFiles.isNotEmpty) 'unavailableFiles': unavailableFiles,
+        if (fileSync) 'fileSync': true,
       };
 
   factory HomeSyncSnapshot.fromJson(Map<String, dynamic> json) {
@@ -180,6 +287,16 @@ class HomeSyncSnapshot {
       ];
     }
 
+    List<String> parseStrings(String key) {
+      final raw = json[key];
+      if (raw is! List) return const [];
+      return [
+        for (final item in raw)
+          if (item is String && item.isNotEmpty) item,
+      ];
+    }
+
+    final rawFiles = json['files'];
     return HomeSyncSnapshot(
       folders: parseList('folders', ChatFolder.fromJson),
       conversations: parseList('conversations', HomeSyncConversation.fromJson),
@@ -197,7 +314,167 @@ class HomeSyncSnapshot {
       personasUpdatedAt: DateTime.tryParse(
         json['personasUpdatedAt'] as String? ?? '',
       ),
+      deletedPersonas:
+          parseList('deletedPersonas', HomeSyncTombstone.fromJson),
+      deletedMemories:
+          parseList('deletedMemories', HomeSyncTombstone.fromJson),
+      files: rawFiles is List
+          ? [
+              for (final item in rawFiles)
+                if (item is Map)
+                  HomeSyncFile.tryParse(Map<String, dynamic>.from(item)),
+            ].whereType<HomeSyncFile>().toList()
+          : const [],
+      wantFiles: parseStrings('wantFiles'),
+      unavailableFiles: parseStrings('unavailableFiles'),
+      fileSync: json['fileSync'] == true,
+      known: json['known'] is Map
+          ? {
+              for (final e in (json['known'] as Map).entries)
+                e.key.toString(): e.value.toString(),
+            }
+          : null,
     );
+  }
+}
+
+/// One line per chat describing its state, computed the same way on the
+/// phone and the Mac from their own database (chat row + the grouped
+/// message fingerprint from `DatabaseService.messageFingerprints`). Equal
+/// entries mean the chat is already in sync and needn't be sent.
+abstract final class HomeSyncManifest {
+  static String entry(ChatConversation c, String? messageFingerprint) =>
+      '${c.updatedAt.millisecondsSinceEpoch}|${c.folderId ?? ''}|${c.title}'
+      '#${messageFingerprint ?? '0'}';
+
+  /// Message count from a `messageFingerprints` value.
+  static int messageCount(String? fingerprint) =>
+      fingerprint == null ? 0 : int.tryParse(fingerprint.split('|').first) ?? 0;
+
+  /// An untouched New Chat: never synced.
+  static bool isEmptyDraft(ChatConversation c, int messageCount) =>
+      c.settings['isDraft'] == true && messageCount == 0;
+}
+
+/// Pure helpers for carrying chat pictures / attachments in sync bodies.
+abstract final class HomeSyncFiles {
+  /// A single file larger than this is never sent.
+  static const maxFileBytes = 8 * 1024 * 1024;
+
+  /// Base64 bytes of files per sync body (the relay caps a body at 100 MB);
+  /// whatever doesn't fit goes in a later round.
+  static const maxBodyBytes = 40 * 1024 * 1024;
+
+  /// Top-level folders (under the documents dir) chat files live in. Nothing
+  /// else is ever written by sync.
+  static const allowedRoots = {'images', 'generated_images', 'attachments'};
+
+  /// Paths a sync list carries at most (want / owed lists).
+  static const maxListed = 2000;
+
+  /// [raw] as a safe path relative to the documents dir, or null: no
+  /// absolute paths, schemes, `..`/`.` or empty segments, backslashes or
+  /// control characters, and only inside [allowedRoots].
+  static String? sanitize(String? raw) {
+    if (raw == null) return null;
+    final path = raw.trim();
+    if (path.isEmpty || path.length > 400) return null;
+    if (path.startsWith('/') || path.startsWith('~')) return null;
+    if (path.contains('\\') || path.contains(':')) return null;
+    if (RegExp(r'[\x00-\x1f\x7f]').hasMatch(path)) return null;
+    final parts = path.split('/');
+    if (parts.length < 2) return null;
+    for (final part in parts) {
+      if (part.isEmpty || part == '.' || part == '..') return null;
+    }
+    if (!allowedRoots.contains(parts.first)) return null;
+    return path;
+  }
+
+  /// The wire path for a path stored in a message: relative paths as-is,
+  /// absolute ones under [docsDir] (or any `/Documents/` folder, as
+  /// `ImagePickerHelper.resolveImagePath` does) made relative. Remote
+  /// `http(s)`, `data:` and inline base64 images are skipped (null): they
+  /// already show on the other device.
+  static String? wirePath(String? stored, {String? docsDir}) {
+    if (stored == null) return null;
+    var path = stored.trim();
+    if (path.isEmpty || path.length > 1024) return null;
+    final lower = path.toLowerCase();
+    if (lower.startsWith('data:') || lower.contains('://')) return null;
+    if (path.startsWith('/')) {
+      final root = docsDir == null
+          ? null
+          : (docsDir.endsWith('/') ? docsDir : '$docsDir/');
+      if (root != null && path.startsWith(root)) {
+        path = path.substring(root.length);
+      } else {
+        const marker = '/Documents/';
+        final idx = path.indexOf(marker);
+        if (idx == -1) return null;
+        path = path.substring(idx + marker.length);
+      }
+    }
+    return sanitize(path);
+  }
+
+  /// Every local file the [messages] reference, as wire paths.
+  static Set<String> referencedPaths(
+    Iterable<ChatMessage> messages, {
+    String? docsDir,
+  }) {
+    final out = <String>{};
+    void add(String? stored) {
+      final path = wirePath(stored, docsDir: docsDir);
+      if (path != null) out.add(path);
+    }
+
+    for (final m in messages) {
+      for (final url in m.imageUrls ?? const <String>[]) {
+        add(url);
+      }
+      for (final path in m.allGeneratedImagePaths) {
+        add(path);
+      }
+      for (final file in m.fileAttachments ?? const []) {
+        add(file.filePath);
+      }
+    }
+    return out;
+  }
+
+  /// Length of [bytes] once base64-encoded.
+  static int encodedLength(int bytes) => ((bytes + 2) ~/ 3) * 4;
+
+  /// Picks which [candidates] (in priority order) go in this body: files
+  /// over [maxFile] (or empty) are [tooBig] and never sent; the rest are
+  /// sent while their encoded size fits [budget], otherwise [deferred].
+  static ({List<String> send, List<String> deferred, List<String> tooBig})
+      plan(
+    List<({String path, int size})> candidates, {
+    int maxFile = maxFileBytes,
+    int budget = maxBodyBytes,
+  }) {
+    final send = <String>[];
+    final deferred = <String>[];
+    final tooBig = <String>[];
+    final seen = <String>{};
+    var used = 0;
+    for (final c in candidates) {
+      if (!seen.add(c.path)) continue;
+      if (c.size <= 0 || c.size > maxFile) {
+        tooBig.add(c.path);
+        continue;
+      }
+      final cost = encodedLength(c.size);
+      if (used + cost > budget) {
+        deferred.add(c.path);
+        continue;
+      }
+      used += cost;
+      send.add(c.path);
+    }
+    return (send: send, deferred: deferred, tooBig: tooBig);
   }
 }
 
@@ -210,11 +487,11 @@ class HomeSyncMerge {
     HomeSyncSnapshot local,
     HomeSyncSnapshot remote,
   ) {
-    final deletedConvos = _mergeTombstones(
+    final deletedConvos = mergeTombstones(
       local.deletedConversations,
       remote.deletedConversations,
     );
-    final deletedFolders = _mergeTombstones(
+    final deletedFolders = mergeTombstones(
       local.deletedFolders,
       remote.deletedFolders,
     );
@@ -291,26 +568,101 @@ class HomeSyncMerge {
         ? incoming.personasUpdatedAt
         : local.personasUpdatedAt;
 
+    final deletedPersonas =
+        mergeTombstones(local.deletedPersonas, incoming.deletedPersonas);
+    final personaDeletedAt = {
+      for (final t in deletedPersonas) t.id: t.deletedAt,
+    };
+    bool personaGone(String id, DateTime updatedAt) {
+      final at = personaDeletedAt[id];
+      return at != null && !updatedAt.isAfter(at);
+    }
+
+    final deletedMemories =
+        mergeTombstones(local.deletedMemories, incoming.deletedMemories);
+
     return HomeSyncSnapshot(
       folders: collapsed.folders,
       conversations: collapsed.conversations,
       deletedConversations: deletedConvos,
-      deletedFolders: _mergeTombstones(
+      deletedFolders: mergeTombstones(
         deletedFolders,
         collapsed.folderTombstones,
       ),
-      personaCatalog: mergePersonaCatalog(
-        local.personaCatalog,
-        incoming.personaCatalog,
-      ),
-      personas: mergePersonas(
-        local.personas,
-        incoming.personas,
-        syncIds: syncIds,
-      ),
-      syncPersonaIds: syncIds.toList(),
+      personaCatalog: [
+        for (final info in mergePersonaCatalog(
+          local.personaCatalog,
+          incoming.personaCatalog,
+        ))
+          if (!personaGone(info.id, info.updatedAt)) info,
+      ],
+      personas: [
+        for (final p in mergePersonas(
+          local.personas,
+          incoming.personas,
+          syncIds: syncIds,
+        ))
+          if (!personaGone(p.prompt.id, p.prompt.updatedAt))
+            withoutDeletedMemories(p, deletedMemories),
+      ],
+      syncPersonaIds: [
+        for (final id in syncIds)
+          if (!personaDeletedAt.containsKey(id)) id,
+      ],
       personasEnabled: personasEnabled,
       personasUpdatedAt: personasUpdatedAt,
+      deletedPersonas: deletedPersonas,
+      deletedMemories: deletedMemories,
+      // Only the other device's bytes are worth writing here.
+      files: incoming.files,
+      fileSync: incoming.fileSync,
+    );
+  }
+
+  /// Stable identity of a memory across devices. Memory ids are local
+  /// SQLite row ids (the same number means different facts on the phone and
+  /// the Mac), so a memory is identified by scope + persona + content.
+  static String memoryKey(Map<String, dynamic> m) {
+    final scope = (m['scope']?.toString().trim().isNotEmpty ?? false)
+        ? m['scope'].toString().trim()
+        : 'global';
+    final persona = scope == 'global'
+        ? ''
+        : (m['personaId'] ?? m['persona_id'])?.toString().trim() ?? '';
+    final content = (m['content']?.toString() ?? '').trim().toLowerCase();
+    return '$scope|$persona|$content';
+  }
+
+  static DateTime memoryStamp(Map<String, dynamic> m) =>
+      DateTime.tryParse(m['updatedAt']?.toString() ?? '') ??
+      DateTime.tryParse(m['createdAt']?.toString() ?? '') ??
+      DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// True when [m] was deleted at or after its last update.
+  static bool memoryDeleted(
+    Map<String, dynamic> m,
+    Map<String, DateTime> deletedAt,
+  ) {
+    final at = deletedAt[memoryKey(m)];
+    return at != null && !memoryStamp(m).isAfter(at);
+  }
+
+  static HomeSyncPersona withoutDeletedMemories(
+    HomeSyncPersona p,
+    List<HomeSyncTombstone> tombstones,
+  ) {
+    if (tombstones.isEmpty || p.memories.isEmpty) return p;
+    final at = {for (final t in tombstones) t.id: t.deletedAt};
+    final kept = [
+      for (final m in p.memories)
+        if (!memoryDeleted(m, at)) m,
+    ];
+    if (kept.length == p.memories.length) return p;
+    return HomeSyncPersona(
+      prompt: p.prompt,
+      avatarBase64: p.avatarBase64,
+      avatarExt: p.avatarExt,
+      memories: kept,
     );
   }
 
@@ -393,22 +745,13 @@ class HomeSyncMerge {
     List<Map<String, dynamic>> a,
     List<Map<String, dynamic>> b,
   ) {
-    DateTime stamp(Map<String, dynamic> m) =>
-        DateTime.tryParse(m['updatedAt']?.toString() ?? '') ??
-        DateTime.tryParse(m['createdAt']?.toString() ?? '') ??
-        DateTime.fromMillisecondsSinceEpoch(0);
-
-    String key(Map<String, dynamic> m) {
-      final id = m['id']?.toString().trim() ?? '';
-      if (id.isNotEmpty) return 'id:$id';
-      return 'c:${m['content']}|${m['scope']}|${m['personaId']}';
-    }
-
+    // Keyed on content, never on `id` (device-local row ids collide).
     final byKey = <String, Map<String, dynamic>>{};
     for (final item in [...a, ...b]) {
-      final k = key(item);
+      final k = memoryKey(item);
       final existing = byKey[k];
-      if (existing == null || stamp(item).isAfter(stamp(existing))) {
+      if (existing == null ||
+          memoryStamp(item).isAfter(memoryStamp(existing))) {
         byKey[k] = item;
       }
     }
@@ -515,18 +858,19 @@ class HomeSyncMerge {
     final byConvoId = {
       for (final item in remapped) item.conversation.id: item,
     };
-    for (final folder in kept.values) {
-      for (final convoId in folder.conversationIds) {
-        final item = byConvoId[convoId];
-        if (item == null || item.conversation.folderId == folder.id) continue;
-        byConvoId[convoId] = HomeSyncConversation(
-          conversation: item.conversation.copyWith(
-            folderId: folder.id,
-            updatedAt: at(),
-          ),
-          messages: item.messages,
-        );
-      }
+    // A chat's own folderId is the truth: moving a chat only changes that,
+    // so folder member lists are rebuilt from it instead of pulling chats
+    // back into a stale folder (and stamping them "now", which made moved
+    // chats snap back and jump to the top). Chats not in this snapshot keep
+    // their listed membership.
+    for (final folder in kept.values.toList()) {
+      final ids = <String>{
+        for (final id in folder.conversationIds)
+          if (!byConvoId.containsKey(id)) id,
+        for (final item in byConvoId.values)
+          if (item.conversation.folderId == folder.id) item.conversation.id,
+      };
+      kept[folder.id] = folder.copyWith(conversationIds: ids.toList());
     }
 
     return (
@@ -537,7 +881,7 @@ class HomeSyncMerge {
     );
   }
 
-  static List<HomeSyncTombstone> _mergeTombstones(
+  static List<HomeSyncTombstone> mergeTombstones(
     List<HomeSyncTombstone> a,
     List<HomeSyncTombstone> b,
   ) {

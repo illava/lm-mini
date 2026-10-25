@@ -3,6 +3,8 @@ import FlutterMacOS
 import AVFoundation
 import Speech
 import Darwin
+import IOKit.pwr_mgt
+import ServiceManagement
 
 @_silgen_name("proc_pidpath")
 private func lmMiniProcPidPath(_ pid: pid_t, _ buffer: UnsafeMutableRawPointer?, _ buffersize: UInt32) -> Int32
@@ -19,6 +21,12 @@ class AppDelegate: FlutterAppDelegate {
   /// Last llama-server pid Dart reported. Cmd-Q reparents the child to
   /// launchd unless we kill it here while this process is still alive.
   private var sidecarPid: pid_t = 0
+  /// Port Dart reported with the pid (8741 unless another app held it).
+  private var sidecarPort: Int = 8741
+  /// `PreventUserIdleSystemSleep` assertion held while sharing with phones.
+  private var sleepAssertionID: IOPMAssertionID = IOPMAssertionID(0)
+  private var sleepAssertionHeld = false
+  private var wakeObserver: NSObjectProtocol?
 
   /// Hide to the menu bar (and drop the Dock tile) whenever the status item exists.
   var shouldHideToTray: Bool { statusItem != nil }
@@ -58,21 +66,28 @@ class AppDelegate: FlutterAppDelegate {
   /// kill it here — otherwise it keeps GPU/RAM after the user Cmd-Q's.
   override func applicationWillTerminate(_ notification: Notification) {
     terminateOwnedSidecar()
+    setPreventSleep(false)
+    if let observer = wakeObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(observer)
+      wakeObserver = nil
+    }
     super.applicationWillTerminate(notification)
   }
 
   private func terminateOwnedSidecar() {
-    Self.terminateLlamaSidecar(pid: sidecarPid, port: 8741)
+    Self.terminateLlamaSidecar(pid: sidecarPid, port: sidecarPort)
     sidecarPid = 0
   }
 
-  /// Home's sidecar always binds 127.0.0.1:8741. Do not scan other ports.
+  /// Home's sidecar binds 127.0.0.1:[port] (8741 by default). Only processes
+  /// whose executable is llama-server are killed — another app may own the
+  /// port, and it must survive LM Mini quitting.
   static func terminateLlamaSidecar(pid: pid_t = 0, port: Int = 8741) {
     var pids = Set<pid_t>()
     if pid > 1, Self.shouldKillReportedSidecar(pid: pid) {
       pids.insert(pid)
     }
-    for extra in pidsListening(on: port) {
+    for extra in pidsListening(on: port) where Self.isLlamaServer(pid: extra) {
       pids.insert(extra)
     }
     for target in pids {
@@ -96,6 +111,95 @@ class AppDelegate: FlutterAppDelegate {
     }
     if n <= 0 { return true }
     return String(cString: path).contains("llama-server")
+  }
+
+  /// Strict check for pids found by port scan: unreadable path → not ours.
+  static func isLlamaServer(pid: pid_t) -> Bool {
+    if pid <= 1 { return false }
+    var path = [CChar](repeating: 0, count: Int(4 * 1024))
+    let n = path.withUnsafeMutableBytes { buf -> Int32 in
+      lmMiniProcPidPath(pid, buf.baseAddress, UInt32(buf.count))
+    }
+    if n <= 0 { return false }
+    let name = (String(cString: path) as NSString).lastPathComponent
+    return name == "llama-server"
+  }
+
+  // MARK: - Sleep prevention / login item / wake
+
+  /// Keeps the Mac from idle-sleeping while phones use it. The display may
+  /// still sleep; closing a laptop lid still sleeps (by design of the API).
+  private func setPreventSleep(_ enabled: Bool, reason: String = "LM Mini is sharing models with your phone") {
+    if enabled {
+      if sleepAssertionHeld { return }
+      var id = IOPMAssertionID(0)
+      let status = IOPMAssertionCreateWithName(
+        kIOPMAssertPreventUserIdleSystemSleep as CFString,
+        IOPMAssertionLevel(kIOPMAssertionLevelOn),
+        reason as CFString,
+        &id
+      )
+      if status == kIOReturnSuccess {
+        sleepAssertionID = id
+        sleepAssertionHeld = true
+      } else {
+        NSLog("LM Mini: IOPMAssertionCreateWithName failed (\(status))")
+      }
+    } else {
+      if !sleepAssertionHeld { return }
+      IOPMAssertionRelease(sleepAssertionID)
+      sleepAssertionID = IOPMAssertionID(0)
+      sleepAssertionHeld = false
+    }
+  }
+
+  private func launchAtLoginStatus() -> String {
+    if #available(macOS 13.0, *) {
+      switch SMAppService.mainApp.status {
+      case .enabled: return "enabled"
+      case .requiresApproval: return "requiresApproval"
+      case .notRegistered: return "notRegistered"
+      case .notFound: return "notFound"
+      @unknown default: return "notRegistered"
+      }
+    }
+    return "unsupported"
+  }
+
+  private func setLaunchAtLogin(_ enabled: Bool, result: @escaping FlutterResult) {
+    guard #available(macOS 13.0, *) else {
+      result("unsupported")
+      return
+    }
+    do {
+      if enabled {
+        if SMAppService.mainApp.status != .enabled {
+          try SMAppService.mainApp.register()
+        }
+      } else if SMAppService.mainApp.status != .notRegistered {
+        try SMAppService.mainApp.unregister()
+      }
+      result(launchAtLoginStatus())
+    } catch {
+      NSLog("LM Mini: login item update failed: \(error.localizedDescription)")
+      result(FlutterError(
+        code: "LOGIN_ITEM",
+        message: error.localizedDescription,
+        details: launchAtLoginStatus()
+      ))
+    }
+  }
+
+  /// Dart re-checks the relay socket and the sidecar after sleep.
+  private func observeWake() {
+    if wakeObserver != nil { return }
+    wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didWakeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      self?.trayChannel?.invokeMethod("systemDidWake", arguments: nil)
+    }
   }
 
   static func pidsListening(on port: Int) -> [pid_t] {
@@ -124,6 +228,7 @@ class AppDelegate: FlutterAppDelegate {
     setupAudioDecodeChannel()
     setupTrayChannel()
     setupPrivacyChannel()
+    observeWake()
   }
 
   private func setupMenuChannel(retry: Int = 0) {
@@ -404,6 +509,30 @@ class AppDelegate: FlutterAppDelegate {
         raw = 0
       }
       sidecarPid = pid_t(raw)
+      if let p = args?["port"] as? Int, p > 0 {
+        sidecarPort = p
+      } else if let p = args?["port"] as? NSNumber, p.intValue > 0 {
+        sidecarPort = p.intValue
+      }
+      result(nil)
+    case "setPreventSleep":
+      let args = call.arguments as? [String: Any]
+      let enabled = args?["enabled"] as? Bool ?? false
+      if let reason = args?["reason"] as? String, !reason.isEmpty {
+        setPreventSleep(enabled, reason: reason)
+      } else {
+        setPreventSleep(enabled)
+      }
+      result(sleepAssertionHeld)
+    case "getLaunchAtLogin":
+      result(launchAtLoginStatus())
+    case "setLaunchAtLogin":
+      let enabled = (call.arguments as? [String: Any])?["enabled"] as? Bool ?? false
+      setLaunchAtLogin(enabled, result: result)
+    case "openLoginItemsSettings":
+      if #available(macOS 13.0, *) {
+        SMAppService.openSystemSettingsLoginItems()
+      }
       result(nil)
     default:
       result(FlutterMethodNotImplemented)

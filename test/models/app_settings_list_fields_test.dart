@@ -38,21 +38,24 @@ void main() {
     expect(repaired.pinnedModels, ['pinned-a']);
   });
 
-  test('glassEffectsEnabled defaults on and round-trips through json', () {
+  test('glassEffectsEnabled defaults off and round-trips through json', () {
     final fresh = AppSettings.fromJson({'serverUrl': 'http://localhost:1234'});
-    expect(fresh.glassEffectsEnabled, isTrue);
+    expect(fresh.glassEffectsEnabled, isFalse);
     expect(fresh.lowBatteryMode, isFalse);
-    expect(fresh.glassEffectsActive, isTrue);
+    expect(fresh.glassEffectsActive, isFalse);
 
-    final off = AppSettings.fromJson({
+    final on = AppSettings.fromJson({
       'serverUrl': 'http://localhost:1234',
-      'glassEffectsEnabled': false,
+      'glassEffectsEnabled': true,
     });
-    expect(off.glassEffectsEnabled, isFalse);
-    expect(off.copyWith(glassEffectsEnabled: true).glassEffectsEnabled, isTrue);
+    expect(on.glassEffectsEnabled, isTrue);
+    expect(on.glassEffectsActive, isTrue);
+    expect(AppSettings.fromJson(on.toJson()).glassEffectsEnabled, isTrue);
+    expect(on.copyWith(glassEffectsEnabled: false).glassEffectsEnabled, isFalse);
 
     final saver = AppSettings.fromJson({
       'serverUrl': 'http://localhost:1234',
+      'glassEffectsEnabled': true,
       'lowBatteryMode': true,
     });
     expect(saver.lowBatteryMode, isTrue);

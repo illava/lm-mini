@@ -213,6 +213,47 @@ class ArenaService {
         }
       }
 
+      // ── LM Mini Home (Mac llama-server: OpenAI API only) ──────────────
+      else if (kind == 'lmMiniDesktop') {
+        await for (final chunk in _lm.streamChatCompletion(
+          baseUrl: arenaSettings.serverUrl,
+          formattedMessages: [
+            {'role': 'user', 'content': prompt},
+          ],
+          settings: arenaSettings.copyWith(selectedModel: contestant.modelId),
+          apiToken: arenaSettings.apiToken,
+        )) {
+          if (isCancelled()) break;
+          if (chunk.containsKey('error')) {
+            final err = chunk['error'];
+            yield ArenaStreamEvent.error(
+                err is String ? err : (err?.toString() ?? 'Unknown error'));
+            return;
+          }
+          final usage = chunk['usage'];
+          if (usage is Map) {
+            serverTokens =
+                (usage['completion_tokens'] as num?)?.toInt() ?? serverTokens;
+          }
+          final reasoning = chunk['reasoning'];
+          if (reasoning is String && reasoning.isNotEmpty) {
+            markFirstToken();
+            yield ArenaStreamEvent.reasoning(reasoning);
+            continue;
+          }
+          final content = chunk['content'];
+          if (content is String && content.isNotEmpty) {
+            markFirstToken();
+            contentBuf.write(content);
+            yield ArenaStreamEvent.delta(content);
+            if (StreamRepetitionGuard.shouldStop(contentBuf.toString())) {
+              stopReason = 'repetition';
+              break;
+            }
+          }
+        }
+      }
+
       // ── LM Studio (V1 stateful, non-persisted) ────────────────────────
       else {
         await for (final event in _lm.streamStatefulChat(

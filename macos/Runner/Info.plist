@@ -34,6 +34,10 @@
 	<string>public.app-category.productivity</string>
 	<key>NSCameraUsageDescription</key>
 	<string>LM Mini needs camera access to scan LM Mini Connect QR codes and capture images for vision chats.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>LM Mini uses your photo library to pick images for chats, avatars and backgrounds, and to save images you generate.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Saves images and videos you choose into Photos.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>LM Mini needs microphone access so you can dictate messages and use Voice Mode.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

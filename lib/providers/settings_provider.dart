@@ -189,9 +189,16 @@ class SettingsProvider with ChangeNotifier {
   /// Resolves the configured cloud/Ollama/oMLX provider for
   /// [AppSettings.activeProviderKind]. Prefers the active provider when it
   /// matches the selected kind; otherwise falls back to the saved entry.
-  CloudApiProvider? resolveCloudProvider([CloudApiService? cloud]) {
+  CloudApiProvider? resolveCloudProvider([CloudApiService? cloud]) =>
+      resolveCloudProviderFor(_settings.activeProviderKind, cloud);
+
+  /// [resolveCloudProvider] for code that has settings but no provider
+  /// instance (widgets, background refresh).
+  static CloudApiProvider? resolveCloudProviderFor(
+    String kind, [
+    CloudApiService? cloud,
+  ]) {
     cloud ??= CloudApiService();
-    final kind = _settings.activeProviderKind;
     if (!isCloudProviderKind(kind)) return null;
 
     bool allowed(CloudApiProvider p) =>
@@ -2046,7 +2053,40 @@ class SettingsProvider with ChangeNotifier {
   }
 
   /// Upsert personas copied from the other device without deleting local-only ones.
-  Future<void> applyHomeSyncPersonas({
+  /// Home Sync: personas deleted on the other device. True when any were
+  /// removed. Does not record new deletions (they came from there).
+  Future<bool> removeHomeSyncPersonas(Set<String> ids) async {
+    final current = List<SystemPrompt>.from(_settings.savedSystemPrompts ?? []);
+    final before = current.length;
+    current.removeWhere((p) =>
+        ids.contains(p.id) && p.id != BuiltinPersonaService.defaultPersonaId);
+    if (current.length == before) return false;
+    var selectedId = _settings.selectedSystemPromptId;
+    if (selectedId != null && ids.contains(selectedId)) {
+      selectedId =
+          current.any((p) => p.id == BuiltinPersonaService.defaultPersonaId)
+              ? BuiltinPersonaService.defaultPersonaId
+              : null;
+    }
+    _settings = _settings.copyWith(
+      savedSystemPrompts: current,
+      selectedSystemPromptId: selectedId,
+      systemPrompt: selectedId == BuiltinPersonaService.defaultPersonaId
+          ? ''
+          : _settings.systemPrompt,
+      homeSyncPersonaIds: [
+        for (final id in _settings.homeSyncPersonaIds)
+          if (!ids.contains(id)) id,
+      ],
+    );
+    await _settingsService.saveSettings(_settings);
+    WidgetDataService.updatePersonas(current);
+    notifyListeners();
+    return true;
+  }
+
+  /// True when saved personas or the sync selection changed.
+  Future<bool> applyHomeSyncPersonas({
     required List<SystemPrompt> prompts,
     required List<String> syncIds,
     required bool enabled,
@@ -2068,7 +2108,7 @@ class SettingsProvider with ChangeNotifier {
         }
       }
     }
-    if (!changed) return;
+    if (!changed) return false;
     final next = byId.values.toList();
     _settings = _settings.copyWith(
       savedSystemPrompts: next,
@@ -2079,6 +2119,7 @@ class SettingsProvider with ChangeNotifier {
     await _settingsService.saveSettings(_settings);
     WidgetDataService.updatePersonas(next);
     notifyListeners();
+    return true;
   }
 
   bool _sameIdList(List<String> a, List<String> b) {
@@ -2251,6 +2292,8 @@ class SettingsProvider with ChangeNotifier {
       savedLocalProviderBaseUrls: const {},
       remoteConnectVersion: null,
       remoteBackends: const [],
+      remoteLanUrls: const [],
+      remoteLanFingerprint: null,
       remoteEncryptionKey: null,
       homeSyncEnabled: false,
       homeSyncPrompted: false,
@@ -2633,6 +2676,8 @@ class SettingsProvider with ChangeNotifier {
   /// Delete a saved system prompt
   void deleteSystemPrompt(String promptId) {
     if (promptId == BuiltinPersonaService.defaultPersonaId) return;
+    // Synced personas: tell the Mac / phone not to bring it back.
+    unawaited(HomeSyncService.instance.rememberDeletedPersona(promptId));
 
     final current = List<SystemPrompt>.from(_settings.savedSystemPrompts ?? []);
     current.removeWhere((p) => p.id == promptId);

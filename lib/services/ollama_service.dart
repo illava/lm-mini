@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/model_load_config.dart';
 import '../models/app_settings.dart';
 import '../models/message_stats.dart';
 import '../utils/chat_message_normalizer.dart';
@@ -26,6 +27,21 @@ class OllamaService {
   static final OllamaService instance = OllamaService._();
 
   static const Duration _streamIdleTimeout = Duration(seconds: 120);
+
+  /// Context sizes above this often don't fit a home GPU, so Ollama spills
+  /// to the CPU and can stall mid-reply.
+  static const int largeContextHint = 32768;
+
+  /// A reply that started and then went silent for [_streamIdleTimeout].
+  static String streamStalledMessage(int contextWindow) {
+    const base = 'The reply stopped coming from your computer: the connection '
+        'or Ollama stalled for 2 minutes. On mobile data or a VPN '
+        '(Tailscale), try again.';
+    if (contextWindow <= largeContextHint) return base;
+    final size = ModelLoadConfigHelper.formatTokenCount(contextWindow);
+    return '$base Your context window is $size, which may not fit in your '
+        "computer's memory. Try 16K–32K in Model Parameters.";
+  }
   static const Duration _showTimeout = Duration(seconds: 8);
 
   static final Set<http.Client> _activeStreamClients = <http.Client>{};
@@ -380,6 +396,7 @@ class OllamaService {
     // Short TCP connect timeout: a dead LAN host fails in seconds.
     final client = createServerHttpClient();
     _activeStreamClients.add(client);
+    var sawReply = false;
     try {
       final request = http.Request('POST', Uri.parse('$base/api/chat'));
       request.headers.addAll(_headers(
@@ -404,6 +421,7 @@ class OllamaService {
       await for (final chunk in streamedResponse.stream
           .timeout(_streamIdleTimeout)
           .transform(utf8.decoder)) {
+        sawReply = true;
         final combined = lineBuffer + chunk;
         final lines = combined.split('\n');
         lineBuffer = lines.removeLast();
@@ -503,9 +521,14 @@ class OllamaService {
         }
       }
     } on TimeoutException {
+      // The idle limit only runs once Ollama has answered (loading has no
+      // limit), so this is a reply that stopped mid-way. Keep what arrived
+      // (same handling as an interrupted LM Studio reply) and say why.
       yield {
-        'error':
-            'Ollama stream timed out waiting for tokens. Is the model still loading?',
+        'error': sawReply
+            ? streamStalledMessage(settings.contextWindow)
+            : 'Ollama stopped responding. Make sure it is still running.',
+        if (sawReply) 'error_type': 'v1_stream_interrupted',
       };
     } catch (e) {
       yield {'error': e.toString()};

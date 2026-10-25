@@ -155,10 +155,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       MessageInputController();
   String? _highlightedMessageId; // For temporarily highlighting found messages
   bool _userScrolled = false; // Track if user manually scrolled
+  /// Our own open of [ChatScreen.conversationId] has finished.
+  bool _initialSelectDone = false;
+  bool _reselectQueued = false;
   /// Show jump-to-latest control when the user is scrolled away from the bottom.
   bool _showScrollToBottom = false;
   static const double _scrollToBottomThreshold = 120;
   bool _pinToLatestScheduled = false;
+
+  // "Follow new replies" off: last frame's list metrics, to hold the view
+  // still while a reply streams in (see holdViewShift).
+  double? _holdLastMaxExtent;
+  double? _holdLastPixels;
+  int _holdLastMessageCount = 0;
   File? _pendingCameraImage; // Image captured from camera widget launch
   bool _wasLoading = false; // Track loading state for auto-read TTS
   bool _voiceModeActive = false; // Whether inline voice panel is showing
@@ -198,6 +207,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         await context
             .read<ChatProvider>()
             .selectConversation(widget.conversationId!);
+        _initialSelectDone = true;
         // Reversed ListView opens already pinned to the latest message —
         // no load-then-scroll. Reset scroll flags for the new thread.
         if (!mounted) return;
@@ -491,6 +501,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message)),
         );
+      }
+
+      // Follow off: keep what the user is reading still while it streams.
+      if (_scrollController.hasClients) {
+        final pos = _scrollController.position;
+        final count = chatProvider.currentMessages.length;
+        final streaming =
+            chatProvider.isLoading || chatProvider.isSendingMessage;
+        final shift = holdViewShift(
+          autoScrollEnabled: autoScrollEnabled,
+          streaming: streaming,
+          sameMessageCount: count == _holdLastMessageCount,
+          previousMaxExtent: _holdLastMaxExtent ?? pos.maxScrollExtent,
+          maxExtent: pos.maxScrollExtent,
+          previousPixels: _holdLastPixels ?? pos.pixels,
+          pixels: pos.pixels,
+        );
+        if (shift > 0) {
+          pos.jumpTo((pos.pixels + shift).clamp(0.0, pos.maxScrollExtent));
+        }
+        _holdLastMaxExtent = pos.maxScrollExtent;
+        _holdLastPixels = pos.pixels;
+        _holdLastMessageCount = count;
       }
 
       if (_scrollController.hasClients &&
@@ -1061,6 +1094,28 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             chatProvider.currentConversation?.id !=
                                 widget.conversationId);
                     if (awaitingTarget) {
+                      final targetId = widget.conversationId!;
+                      if (!chatProvider.isLoading && _initialSelectDone) {
+                        if (chatProvider.conversationById(targetId) == null) {
+                          // Deleted or pruned while open: say so instead of
+                          // spinning forever.
+                          return _ChatUnavailable(
+                            onBack: () => Navigator.of(context).maybePop(),
+                          );
+                        }
+                        // Another chat was opened underneath this screen
+                        // (Watch, Siri, sync): bring this one back.
+                        if (!_reselectQueued) {
+                          _reselectQueued = true;
+                          WidgetsBinding.instance.addPostFrameCallback((_) async {
+                            if (!mounted) return;
+                            await context
+                                .read<ChatProvider>()
+                                .selectConversation(targetId);
+                            _reselectQueued = false;
+                          });
+                        }
+                      }
                       return Center(
                         child: SizedBox(
                           width: 22,
@@ -4315,6 +4370,41 @@ class _EmptyChatGreeting extends StatelessWidget {
             softWrap: true,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown when the chat this screen was opened for no longer exists.
+class _ChatUnavailable extends StatelessWidget {
+  final VoidCallback onBack;
+  const _ChatUnavailable({required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.chat_bubble_outline_rounded,
+                size: 40, color: cs.onSurfaceVariant),
+            const SizedBox(height: 12),
+            Text(
+              l10n.chatUnavailable,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.tonal(
+              onPressed: onBack,
+              child: Text(l10n.chatUnavailableBack),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -24,6 +24,7 @@ import '../widgets/huggingface_download_flow.dart';
 import '../widgets/model_browser/model_browser_screen.dart';
 import '../widgets/model_browser/model_family_card.dart';
 import '../widgets/model_browser/on_device_adapter.dart';
+import '../widgets/pro_feature_teaser.dart';
 import 'subscription_screen.dart';
 
 enum _ImportKind { gguf, mlx }
@@ -189,7 +190,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
 
   bool _isFreeTierBlocked(LocalModelSpec spec) {
     if (ProFeatures.isPro) return false;
-    return !spec.isFreeSlot;
+    return !LocalModelCatalog.isFreeTier(spec);
   }
 
   /// Free-tier lock that may be shown as an upgrade prompt. The public build
@@ -200,7 +201,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
   /// The public build lists only the free-slot catalog models and the user's
   /// own imports; Pro-tier rows exist only where Pro can be bought.
   bool _listedInBuild(LocalModelSpec spec) =>
-      ProFeatures.included || spec.isFreeSlot || spec.isImported;
+      ProFeatures.included || LocalModelCatalog.isFreeTier(spec);
 
   String _formatDisk(int bytes) {
     if (bytes < 1024 * 1024 * 1024) {
@@ -316,6 +317,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
             cap: _cap,
             capability: _capability,
             isRecommended: recommendedIds.contains(spec.id),
+            isProLocked: _isUpsellBlocked(spec),
             isFocused: _pendingDownload?.id == spec.id,
             isLoading: _activatingId == spec.id,
             compactQuantName: desktop,
@@ -856,15 +858,18 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
     }
   }
 
+  /// Browsing Hugging Face is free; downloading to the device needs Pro.
   Future<void> _showAddCustomDialog() async {
-    if (!ProFeatures.isPro) {
-      _openPaywall();
-      return;
-    }
+    if (!ProFeatures.isPro && !ProFeatures.showUpsell) return;
 
     await HuggingFaceDownloadFlow.show(
       context: context,
       target: HuggingFaceDownloadTarget.onDevice,
+      beforeDownload: (sheetContext) async {
+        if (ProFeatures.isPro) return true;
+        await showProFeatureTeaser(sheetContext, PaywallFeature.huggingFace);
+        return false;
+      },
       onDownload: (selection) async {
         if (selection.isPlainModelId) return;
         await _downloads.addCustomFromHuggingFace(selection.onDeviceRef);

@@ -50,5 +50,17 @@ class RemoteAccessService {
           {String backend = 'lmStudio'}) async =>
       null;
 
+  void configureLan({
+    required bool enabled,
+    required String? relayUrl,
+    required String? token,
+    required List<String> lanUrls,
+    required String? fingerprint,
+    bool Function()? stillActive,
+    void Function()? refreshEndpoints,
+  }) {}
+
+  void reprobeLan() {}
+
   void dispose() {}
 }

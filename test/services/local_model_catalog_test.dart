@@ -120,4 +120,20 @@ void main() {
       expect(LmStudioDiscoveryService.isLoopbackHost('192.168.1.10'), isFalse);
     });
   });
+
+  test('free tier is 3B and under; bigger catalog models need Pro', () {
+    for (final e in LocalModelCatalog.entries) {
+      expect(LocalModelCatalog.isFreeTier(e), e.paramsB <= 3.0 || e.isFreeSlot,
+          reason: e.id);
+    }
+    final byId = {for (final e in LocalModelCatalog.entries) e.id: e};
+    expect(LocalModelCatalog.isFreeTier(byId['qwen/qwen3.5-4b/Q4_K_M']!),
+        isFalse);
+    expect(
+        LocalModelCatalog.isFreeTier(byId['google/gemma-4-e4b-it/Q4_K_M']!),
+        isFalse);
+    expect(LocalModelCatalog.isFreeTier(byId['qwen/qwen3.5-2b/Q4_K_M']!),
+        isTrue);
+  });
 }
+

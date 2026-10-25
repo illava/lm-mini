@@ -852,37 +852,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
 
-      // Support Section
-      _buildSection(
-        context,
-        title: l10n.supportSection,
-        children: [
-          // Rate the app
-          ListTile(
-            leading: const Icon(Icons.star_rate_rounded, color: Colors.amber),
-            title: Text(l10n.rateApp),
-            subtitle: Text(l10n.rateAppSubtitle),
-            trailing: const Icon(Icons.open_in_new, size: 18),
-            onTap: () => ReviewService().openStoreListing(),
-          ),
-          // Only show Buy Me a Coffee after 7 days of use
-          // if (settingsProvider.showSupportSection)
-          // ListTile(
-          //   leading: const Text('☕', style: TextStyle(fontSize: 24)),
-          //   title: Text(l10n.buyMeACoffee),
-          //   subtitle: Text(l10n.buyMeACoffeeSubtitle),
-          //   trailing: const Icon(Icons.favorite, color: Colors.pink),
-          //   onTap: () => _launchBuyMeACoffee(),
-          // ),
-          FeatureRequestSettingsTile(
-            onOpen: () => _openSettingsScreen(
-              SettingsNavId.supportFeatureRequests,
-              (_) => const FeatureRequestsScreen(),
-            ),
-          ),
-        ],
-      ),
-
       // Data Management Section
       _buildSection(
         context,
@@ -920,18 +889,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : () =>
                       showProFeatureTeaser(context, PaywallFeature.analytics),
             ),
-          // Memory — premium feature
-          if (ProFeatures.isPro)
+          // Memory — Pro; free users see it locked (explainer).
+          if (ProFeatures.isPro || ProFeatures.showUpsell)
             ListTile(
               leading: const Icon(Icons.psychology_outlined),
               title: _proTitle(l10n.memory),
-              subtitle:
-                  Text(l10n.memoryItemCount(MemoryService().items.length)),
+              subtitle: Text(ProFeatures.isPro
+                  ? l10n.memoryItemCount(MemoryService().items.length)
+                  : l10n.premiumMemoryTagline),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openSettingsScreen(
-                SettingsNavId.dataMemory,
-                (_) => const MemoryScreen(),
-              ),
+              onTap: ProFeatures.isPro
+                  ? () => _openSettingsScreen(
+                        SettingsNavId.dataMemory,
+                        (_) => const MemoryScreen(),
+                      )
+                  : () => showProFeatureTeaser(context, PaywallFeature.memory),
             ),
           if (ProFeatures.included)
             ListenableBuilder(
@@ -1190,6 +1162,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 (_) => const SubscriptionScreen(),
               ),
             ),
+        ],
+      ),
+
+      // Support Section
+      _buildSection(
+        context,
+        title: l10n.supportSection,
+        children: [
+          // Rate the app
+          ListTile(
+            leading: const Icon(Icons.star_rate_rounded, color: Colors.amber),
+            title: Text(l10n.rateApp),
+            subtitle: Text(l10n.rateAppSubtitle),
+            trailing: const Icon(Icons.open_in_new, size: 18),
+            onTap: () => ReviewService().openStoreListing(),
+          ),
+          // Only show Buy Me a Coffee after 7 days of use
+          // if (settingsProvider.showSupportSection)
+          // ListTile(
+          //   leading: const Text('☕', style: TextStyle(fontSize: 24)),
+          //   title: Text(l10n.buyMeACoffee),
+          //   subtitle: Text(l10n.buyMeACoffeeSubtitle),
+          //   trailing: const Icon(Icons.favorite, color: Colors.pink),
+          //   onTap: () => _launchBuyMeACoffee(),
+          // ),
+          FeatureRequestSettingsTile(
+            onOpen: () => _openSettingsScreen(
+              SettingsNavId.supportFeatureRequests,
+              (_) => const FeatureRequestsScreen(),
+            ),
+          ),
         ],
       ),
 

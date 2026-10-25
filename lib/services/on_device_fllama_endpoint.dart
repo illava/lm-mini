@@ -3,8 +3,10 @@ import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:fllama/fllama.dart' as fllama;
+import 'package:flutter/foundation.dart';
 
 import '../models/local_model_spec.dart';
+import '../utils/chat_template_thinking.dart';
 import '../utils/fllama_cpu_support.dart';
 import 'llm_endpoint.dart';
 import 'local_model_download_service.dart';
@@ -16,6 +18,9 @@ import 'device_capability_service.dart';
 /// content deltas that `ChatProvider` can append to the temp assistant
 /// message just like it does for LM Studio events.
 class OnDeviceFllamaEndpoint implements LLMEndpoint {
+  /// Chat template per model file (read once from the GGUF).
+  static final Map<String, String> _templates = {};
+
   final LocalModelSpec spec;
   final LocalModelDownloadService _downloads =
       LocalModelDownloadService.instance;
@@ -89,6 +94,10 @@ class OnDeviceFllamaEndpoint implements LLMEndpoint {
     double presencePenalty = 1.1,
     /// Multimodal projector path for vision GGUFs (optional).
     String? mmprojPath,
+    /// The user's Think setting. Off: templates that support it are told not
+    /// to think. On: a template-added `<think>` is put back into the reply so
+    /// the reasoning shows in the collapsed thoughts section.
+    bool thinking = true,
   }) {
     final controller = StreamController<String>();
     () async {
@@ -161,8 +170,23 @@ class OnDeviceFllamaEndpoint implements LLMEndpoint {
           .map((m) => fllama.Message(roleFor(m.role), m.content))
           .toList();
 
+      String? jinjaTemplate;
+      var prefixThink = false;
+      try {
+        final template = _templates[path] ??=
+            await fllama.fllamaChatTemplateGet(path);
+        if (!thinking && ChatTemplateThinking.canDisableThinking(template)) {
+          jinjaTemplate = ChatTemplateThinking.withThinkingOff(template);
+        } else if (ChatTemplateThinking.prefillsThink(template)) {
+          prefixThink = true;
+        }
+      } catch (e) {
+        debugPrint('OnDeviceFllama: chat template check failed: $e');
+      }
+
       final request = fllama.OpenAiRequest(
         modelPath: path,
+        jinjaTemplate: jinjaTemplate,
         mmprojPath: mmprojPath,
         messages: fllamaMessages,
         temperature: temperature,
@@ -177,9 +201,20 @@ class OnDeviceFllamaEndpoint implements LLMEndpoint {
       // fllama's callback delivers the *full* response so far on every tick;
       // we diff against the previous snapshot to emit incremental deltas.
       String previous = '';
+      // Template put `<think>` in the prompt: restore it in front of the
+      // reply once we know the model didn't write its own.
+      var thinkDecided = !prefixThink;
       try {
         final reqId = await fllama.fllamaChat(request, (response, _, done) {
           if (controller.isClosed) return;
+          if (!thinkDecided) {
+            final head = response.trimLeft();
+            if (head.length < 7 && '<think>'.startsWith(head) && !done) {
+              return; // too early to tell
+            }
+            thinkDecided = true;
+            if (!head.startsWith('<think>')) controller.add('<think>\n');
+          }
           if (response.length > previous.length) {
             controller.add(response.substring(previous.length));
             previous = response;

@@ -86,4 +86,44 @@ void main() {
       isFalse,
     );
   });
+
+  group('holdViewShift (follow new replies off)', () {
+    double shift({
+      bool follow = false,
+      bool streaming = true,
+      bool sameCount = true,
+      double prevExtent = 1000,
+      double extent = 1040,
+      double prevPixels = 0,
+      double pixels = 0,
+    }) =>
+        holdViewShift(
+          autoScrollEnabled: follow,
+          streaming: streaming,
+          sameMessageCount: sameCount,
+          previousMaxExtent: prevExtent,
+          maxExtent: extent,
+          previousPixels: prevPixels,
+          pixels: pixels,
+        );
+
+    test('moves by the growth so the view stays still', () {
+      expect(shift(), 40);
+    });
+
+    test('never moves when following is on', () {
+      expect(shift(follow: true), 0);
+    });
+
+    test('no move when not streaming or a message was added', () {
+      expect(shift(streaming: false), 0);
+      expect(shift(sameCount: false), 0);
+    });
+
+    test('no move when nothing grew or it was already corrected', () {
+      expect(shift(extent: 1000), 0);
+      expect(shift(pixels: 40), 0);
+    });
+  });
 }
+

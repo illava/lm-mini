@@ -4948,7 +4948,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get premiumOnDeviceLlmDescription =>
-      'Le chat sur l\'appareil est gratuit avec des modèles de démarrage sélectionnés. Pro débloque les téléchargements du catalogue au-delà de 2B paramètres et l\'import de vos propres modèles GGUF ou MLX depuis Hugging Face — entièrement hors ligne.';
+      'Le chat sur l\'appareil est gratuit avec des modèles de démarrage sélectionnés. Pro débloque les téléchargements du catalogue au-delà de 3B paramètres et l\'import de vos propres modèles GGUF ou MLX depuis Hugging Face — entièrement hors ligne.';
 
   @override
   String get premiumHfBrowse => 'Import Hugging Face';
@@ -7812,4 +7812,72 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get teaserBackupDemoRestored => 'Discussions restaurées';
+
+  @override
+  String get teaserHfTitle => 'Lancez n\'importe quel modèle de Hugging Face';
+
+  @override
+  String get teaserHfPoint1 =>
+      'Parcourez des milliers de modèles GGUF. La recherche est gratuite.';
+
+  @override
+  String get teaserHfPoint2 =>
+      'Choisissez la taille adaptée à votre téléphone ; on vérifie qu’il tourne.';
+
+  @override
+  String get teaserHfPoint3 =>
+      'Téléchargez une fois, puis discutez hors ligne.';
+
+  @override
+  String get teaserHfDemoFits => 'Compatible';
+
+  @override
+  String get teaserHfDemoReady => 'Prêt hors ligne';
+
+  @override
+  String get teaserMemoryTitle => 'Des chats qui se souviennent de vous';
+
+  @override
+  String get teaserMemoryPoint1 =>
+      'Dites-le une fois : votre nom, votre régime, votre projet en cours.';
+
+  @override
+  String get teaserMemoryPoint2 =>
+      'Chaque nouveau chat sait déjà ce qui compte.';
+
+  @override
+  String get teaserMemoryPoint3 =>
+      'Stocké sur cet appareil. Consultez, modifiez ou supprimez chaque souvenir.';
+
+  @override
+  String get teaserMemoryDemoTell => 'Je suis végétarien et je vis à Lisbonne.';
+
+  @override
+  String get teaserMemoryDemoFact1 => 'Végétarien';
+
+  @override
+  String get teaserMemoryDemoFact2 => 'Vit à Lisbonne';
+
+  @override
+  String get teaserMemoryDemoNewChat => 'Nouveau chat';
+
+  @override
+  String get teaserMemoryDemoAsk => 'Des idées pour le dîner ?';
+
+  @override
+  String get teaserMemoryDemoReply =>
+      'Voici 3 adresses végétariennes à Lisbonne…';
+
+  @override
+  String get chatUnavailable => 'Ce chat n\'est plus disponible.';
+
+  @override
+  String get chatUnavailableBack => 'Retour aux chats';
+
+  @override
+  String get connectionSecurity => 'Sécurité de la connexion';
+
+  @override
+  String get connectionSecuritySubtitle =>
+      'Chiffré pendant le transfert (HTTPS). Les discussions passent par le relais LM Mini et ne sont pas chiffrées de bout en bout.';
 }

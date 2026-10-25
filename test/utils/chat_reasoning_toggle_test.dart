@@ -35,13 +35,43 @@ void main() {
   });
 
   group('shouldShow', () {
-    test('hides for on-device engines', () {
-      final settings = AppSettings(
-        activeProviderKind: 'onDeviceGguf',
-        selectedLocalModelId: 'qwen3-4b',
-        selectedModel: 'qwen3-4b',
+    test('shows for on-device GGUF thinking models (Qwen 3.5, Gemma 4)', () {
+      for (final id in [
+        'qwen/qwen3.5-2b/Q4_K_M',
+        'google/gemma-4-e4b-it/Q4_K_M',
+      ]) {
+        final settings = AppSettings(
+          activeProviderKind: 'onDeviceGguf',
+          selectedLocalModelId: id,
+        );
+        expect(ChatReasoningToggle.shouldShow(settings: settings), isTrue,
+            reason: id);
+      }
+    });
+
+    test('hides for non-thinking on-device models, MLX and Apple', () {
+      expect(
+        ChatReasoningToggle.shouldShow(
+          settings: AppSettings(
+            activeProviderKind: 'onDeviceGguf',
+            selectedLocalModelId: 'ibm-granite/granite-4.2-3b/Q4_K_M',
+          ),
+        ),
+        isFalse,
       );
-      expect(ChatReasoningToggle.shouldShow(settings: settings), isFalse);
+      for (final kind in ['onDeviceMlx', 'appleIntelligence']) {
+        expect(
+          ChatReasoningToggle.shouldShow(
+            settings: AppSettings(
+              activeProviderKind: kind,
+              selectedLocalModelId: 'qwen3-4b',
+              selectedModel: 'qwen3-4b',
+            ),
+          ),
+          isFalse,
+          reason: kind,
+        );
+      }
     });
 
     test('shows for LM Studio reasoning-style ids', () {

@@ -26,6 +26,7 @@ class DesktopSidecarClient {
 
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
+    _runtime.markLocalStream(true);
     try {
       final uri = Uri.parse('$baseUrl/v1/chat/completions');
       final req = await client.postUrl(uri);
@@ -74,6 +75,7 @@ class DesktopSidecarClient {
         }
       }
     } finally {
+      _runtime.markLocalStream(false);
       client.close(force: true);
     }
   }

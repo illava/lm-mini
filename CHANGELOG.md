@@ -2,6 +2,96 @@
 
 All notable changes to LM Mini will be documented in this file.
 
+## [1.10.7] - 2026-10-26
+
+**Home share: direct Wi-Fi, choose your Mac's model, smoother sync**
+
+- Added a direct Wi-Fi connection between your phone and Mac on the same network: faster, encrypted, and works without internet, with the relay as a fallback
+- Added: pick any model downloaded on your Mac from your phone, and your Mac switches to it
+- Added Keep Mac awake while sharing and Open LM Mini at login on the Mac
+- Added a Get a model button on the Mac sharing screen when no model is downloaded
+- Improved chat sync between your phone and Mac: only changes are sent, pictures and memories come along, edits and deletions sync, and deleted personas and memories stay deleted
+- Improved big models on your Mac get time to load, and your phone shows when your Mac is still loading
+- Improved shared Mac models use a 16K context (8K on 8 GB Macs)
+- Improved your phone suggests updating LM Mini on your Mac when it's out of date
+- Improved Remote Access now says how your connection is protected
+- Improved messages when your Mac's pairing changed and you need to scan the new QR code
+- Changed glass effects are off by default on new installs; turn them on in Appearance
+- Fixes chats with your Mac's models failing when Tool Use is off, in group chats and in Arena
+- Fixes your phone showing no model right after pairing with your Mac
+- Fixes your Mac showing Ready with no model to share
+- Fixes long replies through the relay being cut off as if they were finished
+- Fixes the Mac stopping another app that used the same port
+
+## [1.10.5] - 2026-10-24
+
+**Reliability: chats, sync and on-device thinking**
+
+- Improved on-device thinking models like Qwen 3.5: their thinking now goes in the collapsed thoughts section, and you can turn Think off
+- Improved iCloud sync: only chats that changed are uploaded, so it's much lighter on your phone
+- Fixes the chat list and the open chat getting stuck loading until you restart the app
+- Fixes deleted chats and empty New Chats coming back with iCloud sync
+- Fixes the chat still moving while a reply is written when "Follow new replies" is off
+- Fixes large models failing to load over Remote Access with server error 524
+- Fixes the Persona Generator and the News widget using LM Studio instead of Ollama, cloud providers or Apple Intelligence
+- Fixes image generation failing on Automatic1111 after loading a ComfyUI workflow
+- Fixes Ollama replies that stall mid-way being lost; the text already written is kept, with the reason
+- Fixes Pro Search showing "temporarily unavailable" when LM Studio blocks per-request MCPs; you now see which setting to turn on
+- Fixes servers that aren't LM Studio showing "Endpoint not found"; you now see how to add them instead
+
+## [1.10.4] - 2026-10-20
+
+**Apple Intelligence & the 2026 models**
+
+- Added Apple Intelligence: chat with the model built into your iPhone, iPad or Mac, with no download (iOS 26 / macOS 26 on supported devices)
+- Added the 2026 on-device models: Qwen 3.5, Gemma 4, Bonsai (1-bit), LFM 2.5, MiniCPM 5, Ministral 3, SmolLM 3 and Granite 4, grouped by family with one "Best quality" pick for your device
+- Improved setup: use Apple Intelligence, download a model, or connect your computer. Servers found on your Wi-Fi now show right on the card
+- Added a chat style choice during setup: full width or bubbles
+- Added LM Mini now asks your name in your first chat and remembers it
+- Added Arena is now free: race models on your own prompts, compare answers side by side, and keep a history of your races
+- Added group chats in folders
+- Added Apple Intelligence as a group chat participant
+- Improved Apple Intelligence replies start faster in longer chats
+- Improved voice chat: tap the mic button to stop recording
+- Improved the home screen with a clearer Chat button and a New Persona tile
+- Improved models you downloaded before stay available under Older models
+- Fixes PDF export failing on Cyrillic, Greek and emoji, and long messages overlapping across pages
+- Fixes Export All Chats garbling non-English text and overwriting chats with the same title
+- Fixes Obsidian exports with invalid frontmatter, and hidden reasoning tags showing in exports
+- Fixes LM Studio failing with "failed to parse grammar" when structured output and web search are both on
+- Fixes long tool and MCP replies from LM Studio ending early
+- Fixes group chats answering with only your main model when it runs on this device
+- Fixes LM Mini Home participants being rejected in group chat setup
+- Fixes No folder not taking a chat out of its folder
+- Fixes Google sign-in on Android
+
+## [1.10.3] - 2026-10-14
+
+**Shortcuts MCP tools, Keychain & connection fixes**
+
+- Added your LM Studio MCP tools, like web search, to Siri and Shortcuts
+- Added Turn off Remote Access to the "Can't reach your Mac" message
+- Improved API keys, tokens and server headers are now kept in the Keychain / Keystore instead of plain settings
+- Improved German and Russian voices are now labelled as Piper voices
+- Fixes servers on your local network being blocked on mobile data even when a VPN could reach them; the Wi-Fi notice now only appears when the server really can't be reached, and can be closed for the session
+- Fixes OpenAI-compatible providers like Groq failing with "property 'chat_template_kwargs' is unsupported"
+- Fixes Stop not stopping the reply on your computer over Remote Access and USB, which made your next message wait behind it
+- Fixes USB replies arriving all at once instead of streaming
+- Fixes emoji and non-English text showing broken characters over Remote Access, and LM Mini Home
+- Fixes Remote Access no longer checking your computer after a failed reconnect; models now reload when it's back
+- Fixes Ollama, oMLX, Jan or Unsloth pointing at a dead relay after you turn Remote Access off or unpair
+- Fixes a cleared API key still being sent
+- Fixes Add Server ignoring the headers you entered, so servers behind Cloudflare Access couldn't be added
+- Fixes server addresses ending in /v1 failing, and public addresses without http:// or https:// defaulting to unencrypted http
+- Fixes the model you pick not being the one sent to Ollama, oMLX, Jan, Unsloth and cloud providers
+- Fixes switching servers carrying over the wrong model, such as a GPT model being sent to Mistral
+- Fixes a locked Pro server showing as active while chat used a different server
+- Fixes Siri and Shortcuts using an old server or model after you change settings
+- Fixes group chat sending LM Studio participants to your cloud provider
+- Fixes Ollama group chat participants failing over Remote Access
+- Fixes your LM Studio custom headers and Cloudflare Access secret reaching Unsloth servers and cloud chats
+- Fixes LM Mini Home retrying the relay every second when its session was refused
+
 ## [1.10.2] - 2026-10-11
 
 **Remote Access switch & clearer connection errors**

@@ -20,6 +20,8 @@ Widget? proFeatureAnimation(PaywallFeature feature, {double height = 200}) {
     PaywallFeature.branching => const _BranchingAnimation(),
     PaywallFeature.analytics => const _AnalyticsAnimation(),
     PaywallFeature.cloudBackup => const _CloudBackupAnimation(),
+    PaywallFeature.huggingFace => const _HuggingFaceAnimation(),
+    PaywallFeature.memory => const _MemoryAnimation(),
     _ => null,
   };
   if (scene == null) return null;
@@ -114,6 +116,18 @@ _TeaserCopy _copyFor(AppLocalizations l10n, PaywallFeature f) {
         l10n.teaserBackupPoint1,
         l10n.teaserBackupPoint2,
         l10n.teaserBackupPoint3,
+      ]);
+    case PaywallFeature.huggingFace:
+      return _TeaserCopy(l10n.teaserHfTitle, [
+        l10n.teaserHfPoint1,
+        l10n.teaserHfPoint2,
+        l10n.teaserHfPoint3,
+      ]);
+    case PaywallFeature.memory:
+      return _TeaserCopy(l10n.teaserMemoryTitle, [
+        l10n.teaserMemoryPoint1,
+        l10n.teaserMemoryPoint2,
+        l10n.teaserMemoryPoint3,
       ]);
     case PaywallFeature.webSearch:
     default:
@@ -1820,6 +1834,373 @@ class _CloudBackupAnimation extends StatelessWidget {
                   ],
                 );
               }),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Search Hugging Face → pick the quant that fits → it downloads onto the
+/// phone and is ready offline.
+class _HuggingFaceAnimation extends StatelessWidget {
+  const _HuggingFaceAnimation();
+
+  static const _accent = Color(0xFFFF9D00);
+  static const _query = 'qwen 3.5 gguf';
+  static const _repos = [
+    'unsloth/Qwen3.5-9B-GGUF',
+    'bartowski/Qwen3.5-4B-GGUF',
+  ];
+  static const _quants = ['Q3_K_M', 'Q4_K_M', 'Q8_0'];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
+    return _Looping(
+      period: const Duration(milliseconds: 6000),
+      builder: (context, t) {
+        final typed =
+            _query.substring(0, (_query.length * _seg(t, 0.02, 0.20)).round());
+        final pick = _seg(t, 0.36, 0.42);
+        final quants = _seg(t, 0.42, 0.50);
+        final choose = t > 0.56;
+        final download = Curves.easeInOut.transform(_seg(t, 0.62, 0.82));
+        final ready = t > 0.82;
+        final fadeOut = 1 - _seg(t, 0.92, 1.0);
+        return Opacity(
+          opacity: fadeOut,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 7),
+                        decoration: _sceneCard(cs),
+                        child: Row(
+                          children: [
+                            const Text('🤗', style: TextStyle(fontSize: 14)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                typed.isEmpty ? ' ' : typed,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (var i = 0; i < _repos.length; i++)
+                        Builder(builder: (context) {
+                          final p = _seg(t, 0.20 + i * 0.06, 0.30 + i * 0.06);
+                          final picked = i == 0 && pick > 0.5;
+                          return Opacity(
+                            opacity: p,
+                            child: Transform.translate(
+                              offset: Offset(0, 8 * (1 - p)),
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: _sceneCard(cs,
+                                    tint: picked ? _accent : null),
+                                child: Text(
+                                  _repos[i],
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: picked
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      Opacity(
+                        opacity: quants,
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final q in _quants)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: _sceneCard(cs,
+                                    tint: choose && q == 'Q4_K_M'
+                                        ? _accent
+                                        : null),
+                                child: Text(
+                                  q == 'Q4_K_M' && choose
+                                      ? '$q · ${l10n.teaserHfDemoFits}'
+                                      : q,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: choose && q == 'Q4_K_M'
+                                        ? _accent
+                                        : cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 72,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 18),
+                      Container(
+                        width: 56,
+                        height: 92,
+                        decoration: _sceneCard(cs, tint: ready ? _accent : null)
+                            .copyWith(borderRadius: BorderRadius.circular(14)),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            if (download > 0 && !ready)
+                              SizedBox(
+                                width: 34,
+                                height: 34,
+                                child: CircularProgressIndicator(
+                                  value: download,
+                                  strokeWidth: 3,
+                                  color: _accent,
+                                  backgroundColor: cs.outlineVariant,
+                                ),
+                              ),
+                            Icon(
+                              ready
+                                  ? Icons.check_rounded
+                                  : Icons.download_rounded,
+                              size: 20,
+                              color: download > 0 ? _accent : cs.outlineVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Opacity(
+                        opacity: ready ? 1 : 0,
+                        child: Text(
+                          l10n.teaserHfDemoReady,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: _accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// You mention a fact → it's saved as a memory → a brand-new chat already
+/// uses it.
+class _MemoryAnimation extends StatelessWidget {
+  const _MemoryAnimation();
+
+  static const _accent = Color(0xFF8B5CF6);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
+    return _Looping(
+      period: const Duration(milliseconds: 6400),
+      builder: (context, t) {
+        final tell = _seg(t, 0.02, 0.10);
+        final fact1 = _seg(t, 0.16, 0.26);
+        final fact2 = _seg(t, 0.24, 0.34);
+        // First chat slides away, the new chat comes in.
+        final swap = Curves.easeInOut.transform(_seg(t, 0.42, 0.52));
+        final ask = _seg(t, 0.54, 0.62);
+        final glow = _seg(t, 0.62, 0.70);
+        final reply = _seg(t, 0.70, 0.80);
+        final fadeOut = 1 - _seg(t, 0.92, 1.0);
+
+        Widget bubble(String text, {required bool user, double p = 1}) =>
+            Opacity(
+              opacity: p,
+              child: Align(
+                alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 210),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: user
+                      ? BoxDecoration(
+                          color: cs.primary,
+                          borderRadius: BorderRadius.circular(14),
+                        )
+                      : _sceneCard(cs),
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: user ? cs.onPrimary : cs.onSurface,
+                    ),
+                  ),
+                ),
+              ),
+            );
+
+        Widget fact(String text, double p) => Opacity(
+              opacity: p,
+              child: Transform.scale(
+                scale: 0.8 + 0.2 * p,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: _sceneCard(cs, tint: _accent),
+                  child: Text(
+                    text,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: _accent,
+                    ),
+                  ),
+                ),
+              ),
+            );
+
+        return Opacity(
+          opacity: fadeOut,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 168,
+                    child: ClipRect(
+                      child: Stack(
+                        children: [
+                          // First chat.
+                          Transform.translate(
+                            offset: Offset(0, -40 * swap),
+                            child: Opacity(
+                              opacity: 1 - swap,
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: bubble(l10n.teaserMemoryDemoTell,
+                                    user: true, p: tell),
+                              ),
+                            ),
+                          ),
+                          // New chat.
+                          Opacity(
+                            opacity: swap,
+                            child: Transform.translate(
+                              offset: Offset(0, 30 * (1 - swap)),
+                              child: SingleChildScrollView(
+                                physics: const NeverScrollableScrollPhysics(),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Center(
+                                      child: Text(
+                                        l10n.teaserMemoryDemoNewChat,
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    bubble(l10n.teaserMemoryDemoAsk,
+                                        user: true, p: ask),
+                                    const SizedBox(height: 6),
+                                    Opacity(
+                                      opacity: reply,
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Padding(
+                                            padding: EdgeInsets.only(top: 6),
+                                            child: Icon(
+                                                Icons.psychology_rounded,
+                                                size: 16,
+                                                color: _accent),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Flexible(
+                                            child: bubble(
+                                                l10n.teaserMemoryDemoReply,
+                                                user: false),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // The memory card fills up, then lights while it's used.
+                Container(
+                  width: 88,
+                  padding: const EdgeInsets.all(8),
+                  decoration: _sceneCard(cs,
+                      tint: glow > 0 && reply < 1 ? _accent : null),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.psychology_outlined,
+                          size: 20,
+                          color: fact1 > 0 ? _accent : cs.onSurfaceVariant),
+                      const SizedBox(height: 6),
+                      fact(l10n.teaserMemoryDemoFact1, fact1),
+                      const SizedBox(height: 5),
+                      fact(l10n.teaserMemoryDemoFact2, fact2),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         );

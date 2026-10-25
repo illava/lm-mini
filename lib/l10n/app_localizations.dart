@@ -8875,7 +8875,7 @@ abstract class AppLocalizations {
   /// No description provided for @premiumOnDeviceLlmDescription.
   ///
   /// In en, this message translates to:
-  /// **'On-device chat is free with curated starter models. Pro unlocks catalog downloads above 2B parameters and importing your own GGUF or MLX models from Hugging Face — browse, pick a quantization, and run fully offline.'**
+  /// **'On-device chat is free with curated starter models. Pro unlocks catalog downloads above 3B parameters and importing your own GGUF or MLX models from Hugging Face — browse, pick a quantization, and run fully offline.'**
   String get premiumOnDeviceLlmDescription;
 
   /// No description provided for @premiumHfBrowse.
@@ -13727,6 +13727,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Chats restored'**
   String get teaserBackupDemoRestored;
+
+  /// No description provided for @teaserHfTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Run any model from Hugging Face'**
+  String get teaserHfTitle;
+
+  /// No description provided for @teaserHfPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Search thousands of GGUF models. Browsing is free.'**
+  String get teaserHfPoint1;
+
+  /// No description provided for @teaserHfPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick the size that fits your phone; we check it will run.'**
+  String get teaserHfPoint2;
+
+  /// No description provided for @teaserHfPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Download once, then chat fully offline.'**
+  String get teaserHfPoint3;
+
+  /// No description provided for @teaserHfDemoFits.
+  ///
+  /// In en, this message translates to:
+  /// **'Fits'**
+  String get teaserHfDemoFits;
+
+  /// No description provided for @teaserHfDemoReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready offline'**
+  String get teaserHfDemoReady;
+
+  /// No description provided for @teaserMemoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats that remember you'**
+  String get teaserMemoryTitle;
+
+  /// No description provided for @teaserMemoryPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell it once: your name, your diet, the project you are on.'**
+  String get teaserMemoryPoint1;
+
+  /// No description provided for @teaserMemoryPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'Every new chat already knows what matters.'**
+  String get teaserMemoryPoint2;
+
+  /// No description provided for @teaserMemoryPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored on this device. See, edit or delete any memory.'**
+  String get teaserMemoryPoint3;
+
+  /// No description provided for @teaserMemoryDemoTell.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'m vegetarian and I live in Lisbon.'**
+  String get teaserMemoryDemoTell;
+
+  /// No description provided for @teaserMemoryDemoFact1.
+  ///
+  /// In en, this message translates to:
+  /// **'Vegetarian'**
+  String get teaserMemoryDemoFact1;
+
+  /// No description provided for @teaserMemoryDemoFact2.
+  ///
+  /// In en, this message translates to:
+  /// **'Lives in Lisbon'**
+  String get teaserMemoryDemoFact2;
+
+  /// No description provided for @teaserMemoryDemoNewChat.
+  ///
+  /// In en, this message translates to:
+  /// **'New chat'**
+  String get teaserMemoryDemoNewChat;
+
+  /// No description provided for @teaserMemoryDemoAsk.
+  ///
+  /// In en, this message translates to:
+  /// **'Dinner ideas for tonight?'**
+  String get teaserMemoryDemoAsk;
+
+  /// No description provided for @teaserMemoryDemoReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Here are 3 veggie spots near you in Lisbon…'**
+  String get teaserMemoryDemoReply;
+
+  /// No description provided for @chatUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This chat is no longer available.'**
+  String get chatUnavailable;
+
+  /// No description provided for @chatUnavailableBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to chats'**
+  String get chatUnavailableBack;
+
+  /// No description provided for @connectionSecurity.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection security'**
+  String get connectionSecurity;
+
+  /// No description provided for @connectionSecuritySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted in transit (HTTPS). Chats pass through the LM Mini relay and are not end-to-end encrypted.'**
+  String get connectionSecuritySubtitle;
 }
 
 class _AppLocalizationsDelegate

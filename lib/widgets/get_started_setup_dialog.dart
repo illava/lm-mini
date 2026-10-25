@@ -98,7 +98,7 @@ class _GetStartedSetupDialogState extends State<_GetStartedSetupDialog> {
       return;
     }
 
-    if (!SubscriptionService().isPremium && !spec.isFreeSlot) {
+    if (!SubscriptionService().isPremium && !LocalModelCatalog.isFreeTier(spec)) {
       // Public builds have no upgrade path; free-slot picks are offered instead.
       if (!ProFeatures.showUpsell) return;
       if (!mounted) return;

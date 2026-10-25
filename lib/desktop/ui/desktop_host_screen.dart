@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../pro/pro_features.dart';
 import '../../providers/settings_provider.dart';
+import '../../screens/local_models_screen.dart';
 import '../../services/kokoro_model_manager.dart';
 import '../../utils/layout_utils.dart';
 import '../../widgets/desktop_settings_controls.dart';
@@ -15,6 +16,7 @@ import '../../widgets/glass_settings_scaffold.dart';
 import '../desktop_platform.dart';
 import '../host/desktop_host_service.dart';
 import '../runtime/desktop_runtime_manager.dart';
+import '../tray/desktop_tray_service.dart';
 
 /// Desktop-only “Share with phone” host panel (Connect merge UI shell).
 class DesktopHostScreen extends StatefulWidget {
@@ -58,6 +60,7 @@ class _DesktopHostScreenState extends State<DesktopHostScreen> {
     await _refreshBinary();
     await _refreshKokoroModel();
     unawaited(_host.probeServices());
+    unawaited(_host.refreshLaunchAtLogin());
   }
 
   Future<void> _refreshKokoroModel() async {
@@ -240,12 +243,21 @@ class _DesktopHostScreenState extends State<DesktopHostScreen> {
     }
   }
 
+  void _openOnDeviceModels() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const LocalModelsScreen()),
+    );
+  }
+
   Widget _serviceRow(DesktopServiceStatus s, ColorScheme cs) {
-    // Builtin boots on demand, so "offline" really means "ready to start".
+    // Builtin boots on demand, so "offline" really means "ready to start" —
+    // but only when there is a downloaded model to start with.
     final readyOnDemand =
         s.readyOnDemand && s.state == DesktopServiceState.offline;
     final color = readyOnDemand ? cs.primary : _serviceColor(s.state, cs);
-    final statusText = readyOnDemand ? 'Ready' : _serviceStateLabel(s.state);
+    final statusText = s.needsModel
+        ? 'No model'
+        : (readyOnDemand ? 'Ready' : _serviceStateLabel(s.state));
     final statusColor = (s.isOnline || readyOnDemand)
         ? (s.isOnline ? const Color(0xFF34C759) : cs.primary)
         : cs.onSurfaceVariant;
@@ -299,6 +311,13 @@ class _DesktopHostScreenState extends State<DesktopHostScreen> {
             ),
           ),
           const SizedBox(width: 12),
+          if (s.needsModel) ...[
+            TextButton(
+              onPressed: _openOnDeviceModels,
+              child: const Text('Get a model'),
+            ),
+            const SizedBox(width: 4),
+          ],
           Text(
             statusText,
             style: TextStyle(
@@ -380,94 +399,34 @@ class _DesktopHostScreenState extends State<DesktopHostScreen> {
     );
   }
 
-  Widget _encryptionCard(BuildContext context, ColorScheme cs) {
-    final key = _host.encryptionKey;
-    final hasKey = key != null && key.isNotEmpty;
-    String obscure(String value) {
-      if (value.length <= 8) return '\u2022' * value.length;
-      return '${value.substring(0, 4)}${'\u2022' * 8}${value.substring(value.length - 4)}';
-    }
-
+  /// Honest status: HTTPS to the relay, not end-to-end encryption.
+  Widget _securityCard(BuildContext context, ColorScheme cs) {
     return GlassSettingsCard(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.lock_outline_rounded, size: 18, color: cs.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Encryption key',
+            Icon(Icons.lock_outline_rounded, size: 18, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Connection security',
                     style: Theme.of(context)
                         .textTheme
                         .titleSmall
                         ?.copyWith(fontWeight: FontWeight.w700),
                   ),
-                ),
-                Text(
-                  hasKey ? 'On' : 'Off',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: hasKey ? cs.primary : cs.onSurfaceVariant,
+                  const SizedBox(height: 4),
+                  Text(
+                    'Encrypted in transit (HTTPS). Chats pass through the '
+                    'LM Mini relay and are not end-to-end encrypted.',
+                    style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Phones must use this same key. Change it here if you want a custom one.',
-              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5),
-            ),
-            if (hasKey) ...[
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        obscure(key),
-                        style: const TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 13,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Copy',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: key));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Encryption key copied')),
-                        );
-                      },
-                      icon:
-                          Icon(Icons.copy_rounded, size: 16, color: cs.primary),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => _editEncryptionKey(context),
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('Edit encryption key'),
+                ],
               ),
             ),
           ],
@@ -476,39 +435,35 @@ class _DesktopHostScreenState extends State<DesktopHostScreen> {
     );
   }
 
-  Future<void> _editEncryptionKey(BuildContext context) async {
-    final controller = TextEditingController(text: _host.encryptionKey ?? '');
-    final saved = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Encryption key'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Paste a key, or leave blank to generate a new one',
-            border: OutlineInputBorder(),
+  /// "Direct Wi‑Fi: on (192.168.1.20)" — phones on the same network skip
+  /// the relay (encrypted, certificate pinned). Otherwise says why not.
+  Widget _lanStatusRow(ColorScheme cs, String line) {
+    final on = _host.lanUrls.isNotEmpty;
+    return Tooltip(
+      message: on
+          ? 'Phones on the same Wi‑Fi connect to $_here directly '
+              '(encrypted). Elsewhere they use the relay.'
+          : 'Phones use the relay. They switch to Wi‑Fi by themselves when '
+              'it becomes available.',
+      child: Row(
+        children: [
+          Icon(
+            on ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+            size: 15,
+            color: on ? cs.primary : cs.onSurfaceVariant,
           ),
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Save'),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              line,
+              style: TextStyle(
+                color: on ? cs.onSurface : cs.onSurfaceVariant,
+                fontSize: 12.5,
+              ),
+            ),
           ),
         ],
       ),
-    );
-    controller.dispose();
-    if (saved == null) return;
-    await _host.setEncryptionKey(saved);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Encryption key updated')),
     );
   }
 
@@ -625,6 +580,10 @@ class _DesktopHostScreenState extends State<DesktopHostScreen> {
               style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5),
             ),
           ),
+          if (_host.lanStatusLine != null) ...[
+            const SizedBox(height: 6),
+            _lanStatusRow(cs, _host.lanStatusLine!),
+          ],
           const SizedBox(height: 10),
           _phoneNeedsProNote(cs),
           const SizedBox(height: 14),
@@ -713,9 +672,11 @@ class _DesktopHostScreenState extends State<DesktopHostScreen> {
               _toggleRow(
                 icon: Icons.computer_rounded,
                 title: 'LM Mini Home',
-                subtitle: _binaryReady
-                    ? 'Bundled models on $_here'
-                    : 'Runtime ships with the app — update LM Mini if this stays unavailable',
+                subtitle: !_binaryReady
+                    ? 'Runtime ships with the app — update LM Mini if this stays unavailable'
+                    : (_host.builtinHasModel || _runtime.isRunning
+                        ? 'Bundled models on $_here'
+                        : 'Download a model to share'),
                 value: _host.advertiseBuiltin,
                 onChanged: _host.setAdvertiseBuiltin,
               ),
@@ -996,10 +957,56 @@ class _DesktopHostScreenState extends State<DesktopHostScreen> {
       ),
     );
 
+    final macCard = DesktopPlatform.isMacOS
+        ? GlassSettingsCard(
+            child: Column(
+              children: [
+                _toggleRow(
+                  icon: Icons.coffee_rounded,
+                  title: 'Keep $_here awake while sharing',
+                  subtitle: _host.keepAwake
+                      ? (_host.isEnabled
+                          ? 'On — idle sleep is paused; the display can still sleep. '
+                              'Closing the lid still sleeps.'
+                          : 'Applies while Connect with phone is on')
+                      : 'Off — phones lose $_here when it sleeps',
+                  value: _host.keepAwake,
+                  onChanged: _host.setKeepAwake,
+                ),
+                _toggleRow(
+                  icon: Icons.login_rounded,
+                  title: 'Open LM Mini at login',
+                  subtitle: switch (_host.launchAtLoginStatus) {
+                    'enabled' => 'Sharing resumes after a restart',
+                    'requiresApproval' =>
+                      'Allow LM Mini in System Settings › General › Login Items',
+                    'unsupported' => 'Needs macOS 13 or later',
+                    _ => 'Off — open LM Mini yourself after a restart',
+                  },
+                  value: _host.launchAtLogin,
+                  onChanged: _host.launchAtLoginSupported
+                      ? (v) async {
+                          await _host.setLaunchAtLogin(v);
+                          if (_host.launchAtLoginStatus == 'requiresApproval') {
+                            await DesktopTrayService.instance
+                                .openLoginItemsSettings();
+                          }
+                        }
+                      : null,
+                ),
+              ],
+            ),
+          )
+        : null;
+
     final heroLeft = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         enableCard,
+        if (macCard != null) ...[
+          const SizedBox(height: 12),
+          macCard,
+        ],
         const SizedBox(height: 16),
         _connectedServicesSection(cs),
       ],
@@ -1064,18 +1071,22 @@ class _DesktopHostScreenState extends State<DesktopHostScreen> {
                           // The key only protects relay pairing.
                           if (ProFeatures.included) ...[
                             const SizedBox(height: 16),
-                            _encryptionCard(context, cs),
+                            _securityCard(context, cs),
                           ],
                         ],
                       ),
                     )
                   else ...[
                     enableCard,
+                    if (macCard != null) ...[
+                      const SizedBox(height: 12),
+                      macCard,
+                    ],
                     const SizedBox(height: 16),
                     _qrPanel(cs, qrJson),
                     if (ProFeatures.included) ...[
                       const SizedBox(height: 16),
-                      _encryptionCard(context, cs),
+                      _securityCard(context, cs),
                     ],
                     const SizedBox(height: 20),
                     _connectedServicesSection(cs),

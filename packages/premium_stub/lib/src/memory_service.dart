@@ -68,7 +68,10 @@ class MemoryService extends ChangeNotifier {
       false;
 
   /// No-op in stub.
-  Future<void> removeItem(String id) async {}
+  Future<void> removeItem(String id, {bool remember = true}) async {}
+
+  /// Always empty in stub.
+  Future<List<Map<String, dynamic>>> deletedItems() async => [];
 
   /// No-op in stub.
   Future<bool> removeByContent(

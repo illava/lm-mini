@@ -421,12 +421,11 @@ class _AppInitializerState extends State<AppInitializer>
     if ((hasChanges || homeChanged) && mounted) {
       final chatProvider = context.read<ChatProvider>();
       // Reload the conversations and active chat messages natively without user refresh
-      await context.read<FolderProvider>().loadFolders();
-      await chatProvider.loadConversations();
-      if (chatProvider.currentConversation?.id != null) {
-        await chatProvider
-            .selectConversation(chatProvider.currentConversation!.id);
-      }
+      await context.read<FolderProvider>().loadFolders(silent: true);
+      // Quiet refresh: a full reload blanks the chat list and the open chat
+      // behind a spinner, and sync runs every minute.
+      await chatProvider.loadConversations(silent: true);
+      await chatProvider.refreshOpenChatFromStore();
     }
   }
 
@@ -436,12 +435,14 @@ class _AppInitializerState extends State<AppInitializer>
       settings: () => settings.settings,
       shouldDefer: _isGenerationInFlight,
       applyPersonas: settings.applyHomeSyncPersonas,
+      removePersonas: settings.removeHomeSyncPersonas,
       onApplied: () async {
         if (!mounted) return;
         await context.read<FolderProvider>().loadFolders(silent: true);
         if (!mounted) return;
         final chat = context.read<ChatProvider>();
         await chat.loadConversations(silent: true);
+        await chat.refreshOpenChatFromStore();
       },
     );
     HomeSyncService.instance.startPolling();
@@ -516,7 +517,9 @@ class _AppInitializerState extends State<AppInitializer>
 
   void _startSyncTimer() {
     _syncDownTimer?.cancel();
-    _syncDownTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+    // Resume always syncs; while open, every 5 min is plenty (a pull
+    // downloads every iCloud record).
+    _syncDownTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       _performSyncDown();
     });
   }

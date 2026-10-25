@@ -502,6 +502,13 @@ class AppSettings {
   /// Backends advertised by the last paired Connect QR (`lmStudio`, `ollama`, `omlx`, `jan`, `unsloth`).
   final List<String> remoteBackends;
 
+  /// Direct Wi‑Fi endpoints of the paired LM Mini Home
+  /// (`https://192.168.x.x:8743`). Empty for Connect / older Macs.
+  final List<String> remoteLanUrls;
+
+  /// SHA-256 (hex) pin of the paired Mac's direct Wi‑Fi certificate.
+  final String? remoteLanFingerprint;
+
   /// When true, the app should re-enable remote mode after a transient
   /// disconnect (e.g. background health-check failures). Cleared when the
   /// user manually turns remote off or unpairs.
@@ -640,7 +647,7 @@ class AppSettings {
     this.assistantAvatarPath,
     this.chatBackgroundPath,
     this.chatBackgroundOverlayOpacity = 15.0,
-    this.glassEffectsEnabled = true,
+    this.glassEffectsEnabled = false,
     this.lowBatteryMode = false,
     this.showRuntimeInfo = false,
     this.selectedEmbeddingModel,
@@ -749,6 +756,8 @@ class AppSettings {
     this.remoteEncryptionKey,
     this.remoteConnectVersion,
     List<String>? remoteBackends,
+    List<String>? remoteLanUrls,
+    this.remoteLanFingerprint,
     this.remoteAutoReconnect = false,
     this.homeSyncEnabled = false,
     this.homeSyncPrompted = false,
@@ -776,6 +785,7 @@ class AppSettings {
     this.selectedLocalModelId,
     this.speculativeDecodingEnabled = false,
   })  : remoteBackends = remoteBackends ?? const [],
+        remoteLanUrls = remoteLanUrls ?? const [],
         homeSyncPersonaIds = homeSyncPersonaIds ?? const [],
         selectedModelByServer = selectedModelByServer ?? const {},
         savedLocalProviderBaseUrls = savedLocalProviderBaseUrls ?? const {},
@@ -1002,6 +1012,7 @@ class AppSettings {
             _readStringList(() => modelsPreferLoadedParams),
         pinnedModels: _readStringList(() => pinnedModels),
         remoteBackends: _readStringList(() => remoteBackends),
+        remoteLanUrls: _readStringList(() => remoteLanUrls),
         homeSyncPersonaIds: _readStringList(() => homeSyncPersonaIds),
         selectedModelByServer: _readStringMap(() => selectedModelByServer),
         savedLocalProviderBaseUrls:
@@ -1151,6 +1162,8 @@ class AppSettings {
     Object? remoteEncryptionKey = _unset,
     Object? remoteConnectVersion = _unset,
     List<String>? remoteBackends,
+    List<String>? remoteLanUrls,
+    Object? remoteLanFingerprint = _unset,
     bool? remoteAutoReconnect,
     bool? homeSyncEnabled,
     bool? homeSyncPrompted,
@@ -1414,6 +1427,10 @@ class AppSettings {
           ? this.remoteConnectVersion
           : remoteConnectVersion as String?,
       remoteBackends: remoteBackends ?? this.remoteBackends,
+      remoteLanUrls: remoteLanUrls ?? this.remoteLanUrls,
+      remoteLanFingerprint: identical(remoteLanFingerprint, _unset)
+          ? this.remoteLanFingerprint
+          : remoteLanFingerprint as String?,
       remoteAutoReconnect: remoteAutoReconnect ?? this.remoteAutoReconnect,
       homeSyncEnabled: homeSyncEnabled ?? this.homeSyncEnabled,
       homeSyncPrompted: homeSyncPrompted ?? this.homeSyncPrompted,
@@ -1598,6 +1615,8 @@ class AppSettings {
       'remoteEncryptionKey': remoteEncryptionKey,
       'remoteConnectVersion': remoteConnectVersion,
       'remoteBackends': remoteBackends,
+      'remoteLanUrls': remoteLanUrls,
+      'remoteLanFingerprint': remoteLanFingerprint,
       'remoteAutoReconnect': remoteAutoReconnect,
       'homeSyncEnabled': homeSyncEnabled,
       'homeSyncPrompted': homeSyncPrompted,
@@ -1669,7 +1688,7 @@ class AppSettings {
       chatBackgroundPath: json['chatBackgroundPath'],
       chatBackgroundOverlayOpacity:
           (json['chatBackgroundOverlayOpacity'] as num?)?.toDouble() ?? 15.0,
-      glassEffectsEnabled: json['glassEffectsEnabled'] ?? true,
+      glassEffectsEnabled: json['glassEffectsEnabled'] ?? false,
       lowBatteryMode: json['lowBatteryMode'] ?? false,
       showRuntimeInfo: json['showRuntimeInfo'] ?? false,
       selectedEmbeddingModel: json['selectedEmbeddingModel'],
@@ -1805,6 +1824,11 @@ class AppSettings {
               ?.map((e) => e.toString())
               .toList() ??
           const [],
+      remoteLanUrls: (json['remoteLanUrls'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      remoteLanFingerprint: json['remoteLanFingerprint'] as String?,
       remoteAutoReconnect: json['remoteAutoReconnect'] ?? false,
       homeSyncEnabled: json['homeSyncEnabled'] ?? false,
       homeSyncPrompted: json['homeSyncPrompted'] ?? false,

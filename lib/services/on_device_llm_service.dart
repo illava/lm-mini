@@ -266,6 +266,7 @@ class OnDeviceLLMService {
         presencePenalty:
             settings.repeatPenalty > 0 ? settings.repeatPenalty : 1.1,
         frequencyPenalty: settings.frequencyPenalty,
+        thinking: settings.isReasoningEnabled,
       );
     }
     yield* _guardAgainstRepetition(raw);

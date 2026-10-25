@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:lm_mini_premium/lm_mini_premium.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -12,6 +13,7 @@ import '../models/system_prompt.dart';
 import '../providers/settings_provider.dart';
 import '../utils/persona_palette.dart';
 import 'lm_studio_service.dart';
+import 'one_shot_completion.dart';
 import 'on_device_llm_service.dart';
 import 'persona_pack_catalog.dart';
 
@@ -52,6 +54,9 @@ class PersonaGeneratorService {
   Future<GeneratedPersonaDraft> generate({
     required AppSettings settings,
     required String userDescription,
+    /// The configured provider when the active kind is cloud / Ollama /
+    /// oMLX / Jan / Unsloth (`SettingsProvider.resolveCloudProvider`).
+    CloudApiProvider? cloud,
     /// When null, follows [AppSettings.reasoning]. When set, forces on/off
     /// for this generation only (does not change global settings).
     bool? reasoningEnabled,
@@ -89,6 +94,26 @@ class PersonaGeneratorService {
     String raw;
     if (kind == 'onDeviceGguf' || kind == 'onDeviceMlx') {
       raw = await _generateOnDevice(genSettings, systemPrompt, userPrompt);
+    } else if (kind == 'appleIntelligence') {
+      raw = await OneShotCompletion.apple(
+        settings: genSettings,
+        systemPrompt: systemPrompt,
+        userPrompt: userPrompt,
+      );
+    } else if (SettingsProvider.isCloudProviderKind(kind)) {
+      // Ollama, cloud APIs, oMLX, Jan, Unsloth: their own URL, model and
+      // auth — never the LM Studio server URL.
+      if (cloud == null) {
+        throw StateError(
+          'No server is set up for this provider. Add it in Settings first.',
+        );
+      }
+      raw = await OneShotCompletion.cloud(
+        settings: genSettings,
+        cloud: cloud,
+        systemPrompt: systemPrompt,
+        userPrompt: userPrompt,
+      );
     } else {
       raw = await _generateRemote(genSettings, systemPrompt, userPrompt);
     }
@@ -187,6 +212,11 @@ class PersonaGeneratorService {
     }
     return buffer.toString();
   }
+
+  /// Kept for tests; see [OneShotCompletion.textFromCompletion].
+  @visibleForTesting
+  static String? personaTextFromCompletion(dynamic decoded) =>
+      OneShotCompletion.textFromCompletion(decoded);
 
   Future<String> _generateRemote(
     AppSettings settings,

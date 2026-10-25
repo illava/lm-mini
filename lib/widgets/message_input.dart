@@ -18,6 +18,7 @@ import '../services/stt_service.dart';
 import '../services/mac_system_stt_service.dart';
 import '../services/whisper_model_manager.dart';
 import '../services/on_device_llm_service.dart';
+import '../services/apple_intelligence_endpoint.dart';
 import '../desktop/desktop_platform.dart';
 import '../utils/audio_setup_gate.dart';
 import '../utils/voice_stt_send_logic.dart';
@@ -582,6 +583,18 @@ class _MessageInputState extends State<MessageInput> {
     ];
   }
 
+  /// Apple Intelligence: load the model as soon as the user starts typing,
+  /// so the reply starts right away on Send (throttled in the endpoint).
+  void _prewarmOnTyping() {
+    if (_controller.text.isEmpty) return;
+    if (widget.settings?.activeProviderKind != 'appleIntelligence') return;
+    String? conversationId;
+    try {
+      conversationId = context.read<ChatProvider>().currentConversation?.id;
+    } catch (_) {}
+    AppleIntelligenceEndpoint.prewarm(sessionKey: conversationId);
+  }
+
   void _onMentionTextChanged() {
     final participants = widget.mentionableParticipants;
     if (participants == null || participants.isEmpty) return;
@@ -763,6 +776,7 @@ class _MessageInputState extends State<MessageInput> {
     widget.controller?._attach(this);
     _handleInitialImages();
     _controller.addListener(_onMentionTextChanged);
+    _controller.addListener(_prewarmOnTyping);
   }
 
   @override
@@ -792,6 +806,7 @@ class _MessageInputState extends State<MessageInput> {
     widget.controller?._detach(this);
     _dictationLogic.dispose();
     _controller.removeListener(_onMentionTextChanged);
+    _controller.removeListener(_prewarmOnTyping);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -1744,10 +1759,15 @@ class _MessageInputState extends State<MessageInput> {
   /// Compact is a Pro feature (free users see a PRO badge and the paywall);
   /// the open-source build has no Compact control at all.
   bool _shouldShowCompactButton(double contextPercentage) {
-    return ProFeatures.included &&
-        widget.onCompactChat != null &&
-        contextPercentage >= ContextFit.fitFraction;
+    if (!ProFeatures.included || widget.onCompactChat == null) return false;
+    // Free users see the locked chip earlier, before the chat is full.
+    final threshold = !SubscriptionService().isPremium && ProFeatures.showUpsell
+        ? _freeCompactTeaserFraction
+        : ContextFit.fitFraction;
+    return contextPercentage >= threshold;
   }
+
+  static const double _freeCompactTeaserFraction = 0.5;
 
   Widget _buildCompactChatControl(
     AppLocalizations l10n,
@@ -2354,6 +2374,22 @@ class _MessageInputState extends State<MessageInput> {
             );
           },
         ),
+      if (_canShowLockedProTools) ...[
+        _DesktopActionChip(
+          icon: Icons.travel_explore_rounded,
+          label: l10n.lockedSearchChip,
+          iconOnly: isCompactComposer,
+          showProBadge: true,
+          onTap: () => _openProTeaser(PaywallFeature.webSearch),
+        ),
+        _DesktopActionChip(
+          icon: Icons.terminal_rounded,
+          label: l10n.lockedCodeChip,
+          iconOnly: isCompactComposer,
+          showProBadge: true,
+          onTap: () => _openProTeaser(PaywallFeature.codeSandbox),
+        ),
+      ],
       if (_canShowProSearch)
         _DesktopActionChip(
           icon: _proSearchToolIcon,

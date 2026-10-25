@@ -61,6 +61,7 @@ class HuggingFaceDownloadFlow {
     required HuggingFaceDownloadTarget target,
     required Future<void> Function(HuggingFaceDownloadSelection selection)
         onDownload,
+    Future<bool> Function(BuildContext context)? beforeDownload,
   }) {
     final isTablet = isTabletClassLayout(context);
     return showGeneralDialog<void>(
@@ -73,6 +74,7 @@ class HuggingFaceDownloadFlow {
         target: target,
         allowPlainModelId: target == HuggingFaceDownloadTarget.lmStudio,
         onDownload: onDownload,
+        beforeDownload: beforeDownload,
       ),
       transitionBuilder: (ctx, anim, _, child) {
         final curved =
@@ -103,10 +105,14 @@ class _HuggingFaceDownloadSheet extends StatefulWidget {
   final Future<void> Function(HuggingFaceDownloadSelection selection)
       onDownload;
 
+  /// Runs before a download starts; false stops it (e.g. the Pro explainer).
+  final Future<bool> Function(BuildContext context)? beforeDownload;
+
   const _HuggingFaceDownloadSheet({
     required this.target,
     required this.allowPlainModelId,
     required this.onDownload,
+    this.beforeDownload,
   });
 
   @override
@@ -194,6 +200,9 @@ class _HuggingFaceDownloadSheetState extends State<_HuggingFaceDownloadSheet>
 
   Future<void> _startDownload(HuggingFaceDownloadSelection selection) async {
     final l10n = AppLocalizations.of(context);
+    final gate = widget.beforeDownload;
+    if (gate != null && !await gate(context)) return;
+    if (!mounted) return;
     try {
       await widget.onDownload(selection);
       if (!mounted) return;

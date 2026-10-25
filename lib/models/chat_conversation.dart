@@ -35,9 +35,10 @@ class ChatConversation {
 
   /// This conversation filed under [targetFolderId]; `null` takes it out of
   /// any folder (plain `copyWith(folderId: null)` keeps the old folder).
+  /// Bumps [updatedAt] so the move wins when the chat is merged by sync.
   ChatConversation movedToFolder(String? targetFolderId) => targetFolderId == null
-      ? copyWith(clearFolderId: true)
-      : copyWith(folderId: targetFolderId);
+      ? copyWith(clearFolderId: true, updatedAt: DateTime.now())
+      : copyWith(folderId: targetFolderId, updatedAt: DateTime.now());
 
   ChatConversation copyWith({
     String? id,

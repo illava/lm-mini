@@ -146,7 +146,12 @@ void main() {
             conversationIds: const ['c1'],
           ),
         ],
-        conversations: [_packed('c1', older)],
+        conversations: [
+          HomeSyncConversation(
+            conversation: _convo('c1', older).copyWith(folderId: 'games-phone'),
+            messages: const [],
+          ),
+        ],
       ),
       HomeSyncSnapshot(
         folders: [
@@ -339,10 +344,12 @@ void main() {
     expect(merged, hasLength(1));
     expect(merged.single.prompt.name, 'Phone');
     expect(merged.single.avatarBase64, 'cGhvbmU=');
-    expect(merged.single.memories, hasLength(2));
+    // Memory ids are device-local row ids: the same id on both devices is
+    // not the same memory, so both facts are kept.
+    expect(merged.single.memories, hasLength(3));
     expect(
       merged.single.memories.map((m) => m['content']).toSet(),
-      {'likes oolong', 'lives in KL'},
+      {'likes tea', 'likes oolong', 'lives in KL'},
     );
   });
 
@@ -406,4 +413,48 @@ void main() {
     );
     expect(merged.syncPersonaIds, ['new']);
   });
+
+  test('a chat moved out of a folder does not snap back from a stale list',
+      () {
+    final folder = ChatFolder(
+      id: 'work',
+      name: 'Work',
+      createdAt: older,
+      updatedAt: older,
+      conversationIds: const ['c1'],
+    );
+    final merged = HomeSyncMerge.merge(
+      HomeSyncSnapshot(
+        folders: [folder],
+        conversations: [_packed('c1', newer)], // moved to "No folder"
+      ),
+      HomeSyncSnapshot(folders: [folder]),
+    );
+    final c1 =
+        merged.conversations.singleWhere((c) => c.conversation.id == 'c1');
+    expect(c1.conversation.folderId, isNull);
+    expect(c1.conversation.updatedAt, newer);
+    expect(merged.folders.single.conversationIds, isEmpty);
+  });
+
+  test('a persona deleted on one device is not brought back by the other',
+      () {
+    final persona = HomeSyncPersonaInfo(
+      id: 'p1',
+      name: 'Ray',
+      updatedAt: older,
+      memoryCount: 0,
+      hasAvatar: false,
+    );
+    final merged = HomeSyncMerge.merge(
+      HomeSyncSnapshot(
+        deletedPersonas: [HomeSyncTombstone(id: 'p1', deletedAt: newer)],
+      ),
+      HomeSyncSnapshot(personaCatalog: [persona], syncPersonaIds: const ['p1']),
+    );
+    expect(merged.personaCatalog, isEmpty);
+    expect(merged.syncPersonaIds, isEmpty);
+    expect(merged.deletedPersonas.single.id, 'p1');
+  });
 }
+

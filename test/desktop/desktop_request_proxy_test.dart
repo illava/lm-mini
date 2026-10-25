@@ -89,6 +89,16 @@ void main() {
       expect((models.first as Map)['capabilities'], {'vision': true});
     });
 
+    test('cold model list names the model the Mac is about to load', () {
+      const path = '/Users/me/models/Qwen3.5-9B-Q4_K_M.gguf';
+      final openai = DesktopRequestProxy.syntheticProbeBody('/v1/models',
+          modelId: path);
+      expect(((openai['data'] as List).single as Map)['id'], path);
+      final v1 = DesktopRequestProxy.syntheticProbeBody('/api/v1/models',
+          modelId: path);
+      expect((v1['models'] as List), isNotEmpty);
+    });
+
     test('synthetic probe bodies are 200-ok JSON the phone can accept', () {
       expect(
         DesktopRequestProxy.syntheticProbeBody('/api/v1/models')['models'],
@@ -133,7 +143,11 @@ void main() {
           advertiseBuiltin: true,
           advertiseLmStudio: true,
           advertiseOllama: false,
-          reachable: {'lmStudio': true, 'kokoro': false},
+          reachable: {
+            'lmMiniDesktop': true,
+            'lmStudio': true,
+            'kokoro': false,
+          },
         ),
       );
       expect(payload['ok'], isTrue);

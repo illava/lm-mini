@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../utils/home_lan.dart';
+
 /// Parsed QR code payload from LM Mini Connect companion app.
 class RemoteConnectionInfo {
   /// Active relay URL the app should use (always set).
@@ -43,6 +45,15 @@ class RemoteConnectionInfo {
   /// Relay / host error when [hostStatusOk] is false.
   final String? hostStatusError;
 
+  /// Direct Wi‑Fi endpoints of LM Mini Home (`https://192.168.x.x:8743`),
+  /// validated private IPv4 only. Null = the source did not report any (old
+  /// Mac, older link); an empty list = the Mac reported none right now.
+  final List<String>? lanUrls;
+
+  /// SHA-256 (hex) of the Mac's direct Wi‑Fi certificate. The phone talks to
+  /// [lanUrls] only when the server's certificate matches it.
+  final String? lanFingerprint;
+
   RemoteConnectionInfo({
     required this.url,
     required this.token,
@@ -57,7 +68,14 @@ class RemoteConnectionInfo {
     this.hostPlatform,
     this.hostStatusOk = false,
     this.hostStatusError,
+    this.lanUrls,
+    this.lanFingerprint,
   });
+
+  /// Direct Wi‑Fi is usable: at least one endpoint and a valid pin.
+  bool get hasLan =>
+      (lanUrls?.isNotEmpty ?? false) &&
+      normalizeFingerprint(lanFingerprint) != null;
 
   /// True when [url] is the legacy Cloud Run host (deprecated 2026-05-10).
   bool get isLegacyRelay {
@@ -126,6 +144,12 @@ class RemoteConnectionInfo {
       backends: backends,
       kokoroReady: json['kokoroReady'] == true,
       hostPlatform: json['platform'] as String?,
+      lanUrls: json.containsKey(kLanJsonKey)
+          ? parseLanUrls(json[kLanJsonKey])
+          : null,
+      lanFingerprint: normalizeFingerprint(
+        json[kLanFingerprintJsonKey]?.toString(),
+      ),
     );
   }
 }
@@ -160,6 +184,18 @@ class ConnectCompatibility {
     if (connectVersion == null || connectVersion.isEmpty) return true;
     return compareSemver(connectVersion, minConnectVersionForMultiBackend) < 0;
   }
+
+  /// LM Mini on the Mac older than the host fixes the phone relies on
+  /// (Stop, unbroken emoji, sync manifest, model switching). Unknown → false.
+  static const currentHomeHostVersion = '2.1.0';
+  static bool homeHostOutdated(String? hostVersion) {
+    if (hostVersion == null || hostVersion.isEmpty) return false;
+    return compareSemver(hostVersion, currentHomeHostVersion) < 0;
+  }
+
+  static const homeHostUpdateHint =
+      'Update LM Mini on your Mac from the Mac App Store for the latest '
+      'fixes: Stop, chat sync and choosing models from your phone.';
 
   /// Whether the phone app is older than Connect's [minAppVersion].
   static Future<bool> appNeedsUpgrade(String? minAppVersion) async {
@@ -215,6 +251,7 @@ abstract final class RemoteRelayHttp {
     }
 
     final ek = (params['ek'] ?? '').trim();
+    final lanRaw = params[kLanLinkParam];
     return RemoteConnectionInfo(
       url: url,
       token: resolvedToken,
@@ -223,6 +260,14 @@ abstract final class RemoteRelayHttp {
       backends: backends,
       kokoroReady: params['kokoro'] == '1' || params['kokoro'] == 'true',
       hostPlatform: params['platform'] ?? params['os'],
+      // Mac host version (2.1.0+ puts it in the link; older hosts report it
+      // later via host-status).
+      connectVersion: (params['hv'] ?? '').trim().isEmpty
+          ? null
+          : params['hv']!.trim(),
+      // Direct Wi‑Fi (Mac 2.2+). Old links have neither; old phones ignore.
+      lanUrls: lanRaw == null ? null : parseLanUrls(lanRaw),
+      lanFingerprint: normalizeFingerprint(params[kLanFingerprintLinkParam]),
     );
   }
 
@@ -253,6 +298,15 @@ abstract final class RemoteRelayHttp {
   }
 
   /// Human-readable error from a relay / host HTTP body.
+  /// The relay refused this phone's pairing token (e.g. "New session" on
+  /// the Mac signed every phone out).
+  static const pairingChangedMessage =
+      "Your Mac's pairing changed. Open Share with phone on your Mac and "
+      'scan the new QR code.';
+
+  static bool isRelayAuthFailure(String message) =>
+      message.toLowerCase().contains('invalid or missing authentication token');
+
   static String httpErrorMessage(int status, String body) {
     String? fromJson;
     try {
@@ -271,6 +325,9 @@ abstract final class RemoteRelayHttp {
     var message = (fromJson == null || fromJson.isEmpty)
         ? 'Server returned $status'
         : fromJson;
+    if (isRelayAuthFailure(message)) return pairingChangedMessage;
+    // Newer relay copy names both apps; on the phone, point at the Mac app.
+    message = message.replaceAll(' or LM Mini Connect', '');
     message = message.replaceAll('LM Mini Connect', 'LM Mini Home');
     message = message.replaceAll('Open LM Mini Home on your computer.',
         'Open Share with phone in LM Mini Home and wait until it says Connected.');

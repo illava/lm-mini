@@ -17,6 +17,8 @@ void main() {
     PaywallFeature.branching,
     PaywallFeature.analytics,
     PaywallFeature.cloudBackup,
+    PaywallFeature.huggingFace,
+    PaywallFeature.memory,
   ];
 
   for (final feature in animated) {

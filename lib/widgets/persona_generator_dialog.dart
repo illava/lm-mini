@@ -84,6 +84,12 @@ class _PersonaGeneratorDialogState extends State<PersonaGeneratorDialog> {
     if (kind == 'onDeviceGguf' || kind == 'onDeviceMlx') {
       return (s.selectedLocalModelId ?? '').isNotEmpty;
     }
+    if (kind == 'appleIntelligence') return true;
+    if (SettingsProvider.isCloudProviderKind(kind)) {
+      final cloud = sp.resolveCloudProvider();
+      if (cloud == null || cloud.effectiveBaseUrl.trim().isEmpty) return false;
+      return (cloud.selectedModel ?? s.selectedModel ?? '').trim().isNotEmpty;
+    }
     return (s.selectedModel ?? '').isNotEmpty && s.serverUrl.trim().isNotEmpty;
   }
 
@@ -95,6 +101,7 @@ class _PersonaGeneratorDialogState extends State<PersonaGeneratorDialog> {
       if (id.isEmpty) return 'No model selected';
       return id.split('/').last;
     }
+    if (kind == 'appleIntelligence') return 'Apple Intelligence';
     final id = s.selectedModel ?? '';
     if (id.isEmpty) return 'No model selected';
     final resolved = sp.resolveLmStudioModel(id) ?? sp.findModelById(id);
@@ -211,6 +218,7 @@ class _PersonaGeneratorDialogState extends State<PersonaGeneratorDialog> {
       if (!mounted) return;
       final draft = await PersonaGeneratorService.instance.generate(
         settings: sp.settings,
+        cloud: sp.resolveCloudProvider(),
         userDescription: text,
         reasoningEnabled: thinkingOn,
         surprise: surprise,

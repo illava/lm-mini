@@ -149,4 +149,16 @@ void main() {
       expect(LmsMcpError.streamingStatus(msg), '⚠️ MCP server unreachable...');
     });
   });
+
+  test('per-request MCPs turned off in LM Studio gets a setup hint', () {
+    const raw = "Permission denied to use ephemeral MCP server 'lmmini-search' "
+        "at URL 'https://mcp.example.com'. Ensure that the server "
+        'configuration allows ephemeral MCP connections and, if using an API '
+        'token, it has the necessary permissions.';
+    expect(LmsMcpError.isPerRequestMcpsBlocked(raw), isTrue);
+    expect(LmsMcpError.userMessage(raw), LmsMcpError.perRequestMcpsOffMessage);
+    expect(LmsMcpError.userMessage("Remote MCP server 'lmmini-search' failed"),
+        LmsMcpError.proSearchUserMessage);
+  });
 }
+

@@ -768,6 +768,16 @@ class LocalModelCatalog {
   /// True for phone-class models we hide on desktop unless already downloaded.
   static bool isPhoneClass(LocalModelSpec spec) => spec.paramsB < 3.0;
 
+  /// Largest catalog model free users can download; bigger ones need Pro.
+  static const double freeTierMaxParamsB = 3.0;
+
+  /// Free to download without Pro: the starter slots, anything up to
+  /// [freeTierMaxParamsB], and the user's own imports.
+  static bool isFreeTier(LocalModelSpec spec) =>
+      spec.isFreeSlot ||
+      spec.isImported ||
+      spec.paramsB <= freeTierMaxParamsB;
+
   static bool isDraft(LocalModelSpec e) =>
       e.displayName.toLowerCase().contains('draft') ||
       e.description?.toLowerCase().contains('draft') == true;
@@ -906,7 +916,7 @@ class LocalModelCatalog {
     bool eligible(LocalModelSpec e) {
       if (isDraft(e)) return false;
       if (!isListed(e)) return false;
-      if (freeTierOnly && !e.isFreeSlot) return false;
+      if (freeTierOnly && !isFreeTier(e)) return false;
       return fitScore(e, cap) > 0;
     }
 

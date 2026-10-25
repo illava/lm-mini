@@ -48,13 +48,29 @@ class PromotionalPremiumService extends ChangeNotifier {
     await prefs.setString('premium_grant_dialog_seen', grant.grantId);
   }
 
+  StreamSubscription<User?>? _authSub;
+  String? _watchedUid;
+
   Future<void> initialize() async {
     if (!firebaseInitialized) return;
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    // Follow sign-in / sign-out: a grant lives on the signed-in account, and
+    // the old (anonymous) account's grant doc is no longer readable.
+    _authSub ??= FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user?.uid != _watchedUid) unawaited(_watch(user?.uid));
+    });
+    await _watch(FirebaseAuth.instance.currentUser?.uid, force: true);
+  }
 
+  Future<void> _watch(String? uid, {bool force = false}) async {
+    if (!force && uid == _watchedUid) return;
+    _watchedUid = uid;
     await _grantSub?.cancel();
+    _grantSub = null;
+    if (uid == null) {
+      _onGrantChanged(null);
+      return;
+    }
     _grantSub = _adminService.watchPremiumGrant(uid).listen(
       _onGrantChanged,
       onError: (Object e) {
@@ -101,6 +117,7 @@ class PromotionalPremiumService extends ChangeNotifier {
   @override
   void dispose() {
     _grantSub?.cancel();
+    _authSub?.cancel();
     super.dispose();
   }
 }

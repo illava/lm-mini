@@ -7,6 +7,7 @@ import '../models/chat_message.dart';
 import '../models/app_settings.dart';
 import '../models/message_stats.dart';
 import 'reasoning_support_service.dart';
+import 'remote_connection_info.dart';
 import '../utils/chat_image_payload.dart';
 import '../utils/chat_message_normalizer.dart';
 import '../utils/log_redaction.dart';
@@ -267,8 +268,33 @@ class LMStudioService {
       apiToken != null && apiToken.isNotEmpty;
 
   /// Parse error response from LM Studio API
+  /// LM Studio's own chat API (`/api/v1/chat`) answered 404: the server
+  /// isn't LM Studio (llama.cpp, vLLM, an agent… behind the LM Studio
+  /// option) or it's an LM Studio too old to have that API.
+  static const notLmStudioApiMessage =
+      "This server doesn't support LM Studio's chat API. If it's LM Studio, "
+      'update it to the latest version. If it is another server (llama.cpp, '
+      'vLLM, an agent…), add it as an OpenAI-compatible server instead.';
+
+  /// [_parseErrorResponse] for LM Studio's native chat endpoints, where a
+  /// plain 404 means the endpoint itself is missing.
+  static String _nativeChatErrorResponse(http.Response response) {
+    if (response.statusCode == 404 &&
+        modelNotFoundErrorFromHttpBody(response.body) == null) {
+      return notLmStudioApiMessage;
+    }
+    return _parseErrorResponse(response);
+  }
+
+  @visibleForTesting
+  static String nativeChatErrorMessage(int status, String body) =>
+      _nativeChatErrorResponse(http.Response(body, status));
+
   /// Returns a user-friendly error message
   static String _parseErrorResponse(http.Response response) {
+    if (RemoteRelayHttp.isRelayAuthFailure(response.body)) {
+      return RemoteRelayHttp.pairingChangedMessage;
+    }
     try {
       final body = json.decode(response.body);
       if (body is Map) {
@@ -1015,6 +1041,10 @@ class LMStudioService {
 
           for (final line in lines) {
             if (line.trim().isEmpty) continue;
+            // SSE comment (`: loading` keep-alive from a Mac host whose
+            // model is still loading). The bytes already reset the idle
+            // timeout above.
+            if (line.startsWith(':')) continue;
 
             if (line.startsWith('data: ')) {
               final data = line.substring(6).trim();
@@ -1033,7 +1063,17 @@ class LMStudioService {
                       ? (error['message'] ?? error.toString())
                       : error.toString();
                   debugPrint('📥 LM Studio error: $errorMessage');
-                  yield {'error': errorMessage};
+                  // Same classification as an HTTP error body: a Mac host
+                  // that opened the stream while its model loaded reports
+                  // backend errors (context overflow, missing model) here.
+                  final missing = modelNotFoundErrorFromHttpBody(data);
+                  yield {
+                    'error': missing?['error'] ?? errorMessage,
+                    if (missing != null)
+                      'error_type': ModelNotFoundError.type
+                    else if (isContextOverflowError(jsonData))
+                      'error_type': contextOverflowType,
+                  };
                   return;
                 }
 
@@ -1597,6 +1637,9 @@ class LMStudioService {
               currentEventType = null;
               continue;
             }
+
+            // SSE comment / keep-alive: not an event.
+            if (line.startsWith(':')) continue;
 
             // Named SSE format: "event: <type>" and "data: <json>"
             if (line.startsWith('event:')) {
@@ -2179,6 +2222,9 @@ class LMStudioService {
       } else {
         debugPrint(
             'LMStudioService: Stateful chat error ${response.statusCode}: ${response.body}');
+        if (response.statusCode == 404) {
+          throw Exception(_nativeChatErrorResponse(response));
+        }
         throw Exception('Failed to send stateful chat: ${response.statusCode}');
       }
     } catch (e) {
@@ -2348,7 +2394,7 @@ class LMStudioService {
           }
           final reasoningError =
               ReasoningSupportService.isReasoningConfigHttpBody(body);
-          final parsed = _parseErrorResponse(
+          final parsed = _nativeChatErrorResponse(
               http.Response(body, streamedResponse.statusCode));
           final overflow =
               isContextOverflowError(body) || isContextOverflowError(parsed);
@@ -3068,6 +3114,14 @@ class LMStudioService {
         return true;
       } else if (response.statusCode == 401 || response.statusCode == 403) {
         throw Exception(_parseErrorResponse(response));
+      } else if (isGatewayTimeoutStatus(response.statusCode)) {
+        // A proxy in front of LM Studio (the Remote Access relay is behind
+        // Cloudflare, ~100 s limit) gave up while a big model was still
+        // loading. LM Studio keeps loading, so wait for it to show up.
+        debugPrint('LMStudioService: load timed out at the proxy '
+            '(${response.statusCode}); waiting for $path to finish loading');
+        if (await _waitUntilLoaded(baseUrl, path, apiToken)) return true;
+        throw Exception(loadStillRunningMessage);
       } else {
         debugPrint(
             'LMStudioService: Load model error ${response.statusCode}: ${response.body}');
@@ -3087,6 +3141,37 @@ class LMStudioService {
       debugPrint('LMStudioService: Exception in loadModel: $e');
       rethrow;
     }
+  }
+
+  /// Gateway / proxy timeouts (Cloudflare 524/522, 504, 408): the server
+  /// behind it may still be working on the request.
+  static bool isGatewayTimeoutStatus(int code) =>
+      code == 524 || code == 522 || code == 504 || code == 408;
+
+  static const loadStillRunningMessage =
+      'Your computer is still loading this model (big models can take a few '
+      'minutes). Try again in a moment.';
+
+  /// Polls LM Studio's model list until [modelPath] is loaded.
+  Future<bool> _waitUntilLoaded(
+    String baseUrl,
+    String modelPath, [
+    String? apiToken,
+    Duration timeout = const Duration(minutes: 6),
+    Duration every = const Duration(seconds: 5),
+  ]) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      await Future.delayed(every);
+      try {
+        final models =
+            await getAvailableModels(baseUrl: baseUrl, apiToken: apiToken);
+        if (models.any((m) => m.id == modelPath && m.isLoaded)) return true;
+      } catch (_) {
+        // Keep waiting: the relay or server may be busy while loading.
+      }
+    }
+    return false;
   }
 
   /// Unsloth `GET /api/inference/status`. Null when the route is missing.

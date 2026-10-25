@@ -4927,7 +4927,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get premiumOnDeviceLlmDescription =>
-      'Локальный чат бесплатен с подобранными стартовыми моделями. Pro открывает загрузку из каталога моделей больше 2B параметров и импорт своих GGUF/MLX с Hugging Face — полностью офлайн.';
+      'Локальный чат бесплатен с подобранными стартовыми моделями. Pro открывает загрузку из каталога моделей больше 3B параметров и импорт своих GGUF/MLX с Hugging Face — полностью офлайн.';
 
   @override
   String get premiumHfBrowse => 'Импорт с Hugging Face';
@@ -7772,4 +7772,69 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get teaserBackupDemoRestored => 'Чаты восстановлены';
+
+  @override
+  String get teaserHfTitle => 'Запускайте любую модель с Hugging Face';
+
+  @override
+  String get teaserHfPoint1 =>
+      'Ищите среди тысяч GGUF-моделей. Просмотр бесплатный.';
+
+  @override
+  String get teaserHfPoint2 =>
+      'Выберите размер под ваш телефон — мы проверим, что он потянет.';
+
+  @override
+  String get teaserHfPoint3 => 'Скачайте один раз и общайтесь офлайн.';
+
+  @override
+  String get teaserHfDemoFits => 'Подходит';
+
+  @override
+  String get teaserHfDemoReady => 'Готово офлайн';
+
+  @override
+  String get teaserMemoryTitle => 'Чаты, которые вас помнят';
+
+  @override
+  String get teaserMemoryPoint1 =>
+      'Скажите один раз: имя, питание, текущий проект.';
+
+  @override
+  String get teaserMemoryPoint2 => 'Каждый новый чат уже знает главное.';
+
+  @override
+  String get teaserMemoryPoint3 =>
+      'Хранится на этом устройстве. Любую запись можно посмотреть, изменить или удалить.';
+
+  @override
+  String get teaserMemoryDemoTell => 'Я вегетарианец и живу в Лиссабоне.';
+
+  @override
+  String get teaserMemoryDemoFact1 => 'Вегетарианец';
+
+  @override
+  String get teaserMemoryDemoFact2 => 'Живёт в Лиссабоне';
+
+  @override
+  String get teaserMemoryDemoNewChat => 'Новый чат';
+
+  @override
+  String get teaserMemoryDemoAsk => 'Идеи для ужина?';
+
+  @override
+  String get teaserMemoryDemoReply => 'Вот 3 вегетарианских места в Лиссабоне…';
+
+  @override
+  String get chatUnavailable => 'Этот чат больше недоступен.';
+
+  @override
+  String get chatUnavailableBack => 'Назад к чатам';
+
+  @override
+  String get connectionSecurity => 'Безопасность соединения';
+
+  @override
+  String get connectionSecuritySubtitle =>
+      'Шифруется при передаче (HTTPS). Чаты проходят через ретранслятор LM Mini и не защищены сквозным шифрованием.';
 }

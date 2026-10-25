@@ -9,14 +9,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/app_settings.dart';
 import '../../models/local_model_spec.dart';
+import '../../pro/desktop_host/desktop_lan_server.dart';
 import '../../pro/desktop_host/relay_endpoints.dart';
 import '../../pro/pro_features.dart';
 import '../../services/local_model_download_service.dart';
 import '../../services/on_device_llm_service.dart';
+import '../../utils/home_lan.dart';
 import '../desktop_platform.dart';
 import '../runtime/desktop_runtime_manager.dart';
 import '../tray/desktop_tray_service.dart';
 import '../usb/desktop_usb_bridge.dart';
+import 'desktop_host_capabilities.dart';
 import 'desktop_host_url.dart';
 import 'desktop_kokoro_server.dart';
 import 'desktop_relay_client.dart';
@@ -32,6 +35,7 @@ class DesktopServiceStatus {
     required this.state,
     this.detail,
     this.readyOnDemand = false,
+    this.needsModel = false,
   });
 
   final String key;
@@ -42,6 +46,10 @@ class DesktopServiceStatus {
   /// When offline but the backend boots itself on the first phone request
   /// (the builtin sidecar). The UI shows "Ready" rather than "Not running".
   final bool readyOnDemand;
+
+  /// Builtin only: no downloaded GGUF (or no runtime), so nothing can be
+  /// served. The UI offers a way to download a model instead of "Ready".
+  final bool needsModel;
 
   bool get isOnline => state == DesktopServiceState.online;
 }
@@ -54,12 +62,13 @@ class DesktopHostService extends ChangeNotifier {
   static const String relayBaseUrl = RelayEndpoints.baseUrl;
   static const String relayWsUrl = RelayEndpoints.wsUrl;
   static const String minAppVersion = '1.8.0';
-  static const String hostVersion = '2.0.0';
+  static const String hostVersion = desktopHostVersion;
 
   static const _prefsPrefix = 'desktop_host_';
 
   final _relay = DesktopRelayClient.instance;
   final _usb = DesktopUsbBridge.instance;
+  final _lan = DesktopLanServer.instance;
 
   Completer<void>? _loadCompleter;
   bool _enabled = false;
@@ -91,6 +100,20 @@ class DesktopHostService extends ChangeNotifier {
   bool _probing = false;
   bool _reprobeQueued = false;
 
+  /// A downloaded GGUF exists and the bundled runtime binary is present —
+  /// the only case the builtin backend is reported reachable.
+  bool _builtinHasModel = false;
+  bool _builtinBinaryReady = false;
+  String _readyModelsSignature = '';
+  Map<String, DesktopServiceState>? _lastProbe;
+  bool? _lastRuntimeRunning;
+  bool? _lastRuntimeStarting;
+
+  bool _keepAwake = true;
+  bool _sleepAssertionHeld = false;
+  String _launchAtLoginStatus = 'unsupported';
+  Future<void>? _wakeInFlight;
+
   bool get isEnabled => _enabled;
   String? get sessionId => _sessionId;
   String? get authToken => _authToken;
@@ -111,7 +134,34 @@ class DesktopHostService extends ChangeNotifier {
   String get kokoroHost => _kokoroHost;
   int get kokoroPort => _kokoroPort;
   String? get statusMessage => _statusMessage;
+
+  /// Direct Wi‑Fi endpoints phones may use instead of the relay
+  /// (`https://192.168.x.x:8743`). Empty while sharing is off.
+  List<String> get lanUrls => _enabled ? _lan.lanUrls : const [];
+
+  /// SHA-256 pin of the direct Wi‑Fi certificate (with [lanUrls]).
+  String? get lanFingerprint =>
+      lanUrls.isEmpty ? null : _lan.fingerprint;
+
+  /// "Direct Wi‑Fi: on (192.168.1.20)" or why not; null when sharing is off
+  /// or this build has no direct Wi‑Fi.
+  String? get lanStatusLine => _enabled ? _lan.statusLine : null;
   List<DesktopServiceStatus> get services => _services;
+
+  /// Builtin can actually answer a phone (GGUF downloaded + runtime present).
+  bool get builtinServable => _builtinHasModel && _builtinBinaryReady;
+  bool get builtinHasModel => _builtinHasModel;
+
+  /// "Keep Mac awake while sharing" (default on).
+  bool get keepAwake => _keepAwake;
+
+  /// Launch-at-login status from `SMAppService` (see
+  /// [DesktopTrayService.launchAtLoginStatus]).
+  String get launchAtLoginStatus => _launchAtLoginStatus;
+  bool get launchAtLoginSupported => _launchAtLoginStatus != 'unsupported';
+  bool get launchAtLogin =>
+      _launchAtLoginStatus == 'enabled' ||
+      _launchAtLoginStatus == 'requiresApproval';
   bool get isProbing => _probing;
   bool get isRelayConnected => _relay.isConnected;
   bool get isRelayConnecting => _relay.isConnecting;
@@ -153,6 +203,12 @@ class DesktopHostService extends ChangeNotifier {
       if (backends.isNotEmpty) 'b': backends.join(','),
       if (_kokoroEnabled) 'kokoro': '1',
       'platform': Platform.operatingSystem,
+      'hv': hostVersion,
+      // Direct Wi‑Fi (older phones ignore unknown params and use the relay).
+      if (lanUrls.isNotEmpty && lanFingerprint != null) ...{
+        kLanLinkParam: lanUrls.join(','),
+        kLanFingerprintLinkParam: lanFingerprint!,
+      },
     };
     return Uri.parse(base)
         .replace(fragment: Uri(queryParameters: params).query)
@@ -198,6 +254,7 @@ class DesktopHostService extends ChangeNotifier {
         }
       }
       _usbEnabled = prefs.getBool('${_prefsPrefix}usb_enabled') ?? true;
+      _keepAwake = prefs.getBool('${_prefsPrefix}keep_awake') ?? true;
       final hasSession = (_sessionId?.isNotEmpty ?? false) &&
           (_authToken?.isNotEmpty ?? false) &&
           (_encryptionKey?.isNotEmpty ?? false);
@@ -210,6 +267,12 @@ class DesktopHostService extends ChangeNotifier {
       // Let the on-demand sidecar boot when a phone asks for the builtin backend.
       DesktopRuntimeManager.instance.builtinModelResolver =
           _resolveBuiltinModelPath;
+      DesktopRuntimeManager.instance.builtinModelLister =
+          listBuiltinModelPaths;
+      DesktopTrayService.instance.onSystemWake = onSystemWake;
+      LocalModelDownloadService.instance.addListener(_onLocalModelsChanged);
+      DesktopRuntimeManager.instance.addListener(_onRuntimeChanged);
+      unawaited(refreshLaunchAtLogin());
       _syncBackendFlags();
       await _usb.checkAvailable();
       if (!done.isCompleted) done.complete();
@@ -260,6 +323,23 @@ class DesktopHostService extends ChangeNotifier {
     if (_relayListenerAttached) return;
     _relayListenerAttached = true;
     _relay.addListener(_onRelayChanged);
+    _lan.addListener(_onLanChanged);
+  }
+
+  /// Direct Wi‑Fi started / stopped / the Mac's address changed: the QR,
+  /// pairing link and host-status advertise the new endpoints.
+  void _onLanChanged() {
+    _syncBackendFlags();
+    notifyListeners();
+  }
+
+  Future<void> _startLan() async {
+    if (!_enabled) return;
+    await _lan.start(
+      token: () => _authToken ?? '',
+      backends: _currentBackends,
+    );
+    _syncBackendFlags();
   }
 
   /// Status line of the public build, which shares over USB only (internet
@@ -312,10 +392,12 @@ class DesktopHostService extends ChangeNotifier {
           ProFeatures.included ? 'Connecting to relay…' : _usbOnlyStatus();
       notifyListeners();
       await DesktopTrayService.instance.setKeepAlive(true);
+      await _applySleepAssertion();
       if (_kokoroEnabled) {
         await _ensureKokoroServer();
       }
       await _connectRelay();
+      await _startLan();
       if (_usbEnabled) await _usb.start();
       if (!ProFeatures.included) {
         _statusMessage = _usbOnlyStatus();
@@ -324,20 +406,98 @@ class DesktopHostService extends ChangeNotifier {
       unawaited(probeServices());
       // Warm the builtin sidecar so the first phone request is instant
       // instead of racing a cold start.
-      if (_advertiseBuiltin) {
+      if (_advertiseBuiltin && builtinServable) {
         unawaited(DesktopRuntimeManager.instance.ensureBuiltinRunning());
       }
     } else {
       _enabled = false;
       await _saveBool('sharing_enabled', false);
       await _relay.disconnect();
+      await _lan.stop();
       await _usb.stop();
       await DesktopKokoroServer.instance.stop();
       _statusMessage = 'Host sharing is off.';
       await DesktopTrayService.instance.setKeepAlive(false);
+      await _applySleepAssertion();
       notifyListeners();
     }
     await _refreshTray();
+  }
+
+  Future<void> setKeepAwake(bool v) async {
+    _keepAwake = v;
+    await _saveBool('keep_awake', v);
+    await _applySleepAssertion();
+    notifyListeners();
+  }
+
+  /// Hold the no-idle-sleep assertion only while sharing with it enabled.
+  Future<void> _applySleepAssertion() async {
+    final want = _enabled && _keepAwake;
+    if (want == _sleepAssertionHeld) return;
+    _sleepAssertionHeld = want;
+    await DesktopTrayService.instance.setPreventSleep(want);
+  }
+
+  Future<void> refreshLaunchAtLogin() async {
+    final status = await DesktopTrayService.instance.launchAtLoginStatus();
+    if (status == _launchAtLoginStatus) return;
+    _launchAtLoginStatus = status;
+    notifyListeners();
+  }
+
+  Future<void> setLaunchAtLogin(bool v) async {
+    _launchAtLoginStatus = await DesktopTrayService.instance.setLaunchAtLogin(v);
+    notifyListeners();
+  }
+
+  /// The Mac woke from sleep: the relay socket is usually half-open and the
+  /// sidecar may have been suspended. Same path as an app resume after
+  /// suspend, plus a runtime re-warm.
+  Future<void> onSystemWake() {
+    final pending = _wakeInFlight;
+    if (pending != null) return pending;
+    final f = () async {
+      if (!DesktopPlatform.supportsHostMode || !_enabled) return;
+      debugPrint('🖥️ DesktopHost: system woke — reconnecting');
+      // Give Wi-Fi a moment to come back before the first dial.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await onAppResumed(fromSuspend: true);
+      if (_advertiseBuiltin && builtinServable) {
+        unawaited(DesktopRuntimeManager.instance.ensureBuiltinRunning());
+      }
+    }();
+    _wakeInFlight = f;
+    return f.whenComplete(() => _wakeInFlight = null);
+  }
+
+  /// Runtime started / stopped / began loading: refresh the builtin row and
+  /// what phones are told, without re-probing every port.
+  void _onRuntimeChanged() {
+    final rt = DesktopRuntimeManager.instance;
+    if (rt.isRunning == _lastRuntimeRunning &&
+        rt.isStarting == _lastRuntimeStarting) {
+      return;
+    }
+    _lastRuntimeRunning = rt.isRunning;
+    _lastRuntimeStarting = rt.isStarting;
+    final probe = _lastProbe;
+    if (probe == null || _probing) return;
+    _services = _buildServiceList(probe: probe);
+    _syncBackendFlags();
+    notifyListeners();
+  }
+
+  /// A download finished or a model was deleted: re-check what builtin can
+  /// serve. Download progress ticks are ignored (signature unchanged).
+  void _onLocalModelsChanged() {
+    final sig = LocalModelDownloadService.instance.readyEntries
+        .where((e) => e.spec.engine == LocalEngine.fllama)
+        .map((e) => '${e.spec.id}=${e.localPath}')
+        .join('|');
+    if (sig == _readyModelsSignature) return;
+    _readyModelsSignature = sig;
+    unawaited(probeServices());
   }
 
   Future<void> setUsbEnabled(bool value) async {
@@ -475,10 +635,14 @@ class DesktopHostService extends ChangeNotifier {
     _authToken = null;
     _encryptionKey = null;
     await _ensureSession(persist: true);
+    // A new direct Wi‑Fi certificate too: phones paired before must re-pair
+    // (their pinned fingerprint and token are both out of date).
+    await _lan.resetIdentity();
     if (_enabled) {
       _statusMessage = 'Connecting to relay…';
       notifyListeners();
       await _connectRelay();
+      await _startLan();
     } else {
       notifyListeners();
     }
@@ -514,7 +678,11 @@ class DesktopHostService extends ChangeNotifier {
   Future<void> onAppResumed({bool fromSuspend = false}) async {
     if (!DesktopPlatform.supportsHostMode || !_enabled) return;
     await reconnectRelay(force: fromSuspend);
-    if (fromSuspend) unawaited(probeServices());
+    if (fromSuspend) {
+      unawaited(probeServices());
+      // Wi‑Fi may have come back with another address.
+      unawaited(_lan.isRunning ? _lan.refreshAddresses() : _startLan());
+    }
   }
 
   void _syncBackendFlags() {
@@ -538,7 +706,18 @@ class DesktopHostService extends ChangeNotifier {
         kokoroHost: _kokoroHost,
         kokoroPort: _kokoroPort,
         reachable: _reachableMap(),
+        lanUrls: lanUrls,
+        lanFingerprint: lanFingerprint,
       );
+
+  /// Builtin is reachable when it is running, or can start on demand: a GGUF
+  /// is downloaded and the runtime binary ships with this build.
+  static bool builtinReachable({
+    required bool running,
+    required bool hasModel,
+    required bool binaryReady,
+  }) =>
+      running || (hasModel && binaryReady);
 
   Map<String, bool> _reachableMap() {
     final map = <String, bool>{};
@@ -550,7 +729,11 @@ class DesktopHostService extends ChangeNotifier {
       map[kind] = s.isOnline || s.readyOnDemand;
     }
     if (_advertiseBuiltin) {
-      map['lmMiniDesktop'] = true;
+      map['lmMiniDesktop'] = builtinReachable(
+        running: DesktopRuntimeManager.instance.isRunning,
+        hasModel: _builtinHasModel,
+        binaryReady: _builtinBinaryReady,
+      );
     }
     return map;
   }
@@ -709,6 +892,29 @@ class DesktopHostService extends ChangeNotifier {
     }
   }
 
+  /// Every downloaded GGUF the builtin runtime can load (full paths — the id
+  /// llama-server reports). Selected model first. Vision projector files
+  /// (`mmproj`) are not models and are skipped.
+  Future<List<String>> listBuiltinModelPaths() async {
+    try {
+      await LocalModelDownloadService.instance.init();
+      final out = <String>[];
+      final preferred = await _resolveBuiltinModelPath();
+      if (preferred != null) out.add(preferred);
+      for (final e in LocalModelDownloadService.instance.readyEntries) {
+        if (e.spec.engine != LocalEngine.fllama || e.localPath == null) {
+          continue;
+        }
+        final path = await _ggufPathFromEntry(e);
+        if (path == null || out.contains(path)) continue;
+        out.add(path);
+      }
+      return out;
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
   LocalModelEntry? _firstReadyGgufEntry() {
     for (final e in LocalModelDownloadService.instance.readyEntries) {
       if (e.spec.engine == LocalEngine.fllama && e.localPath != null) {
@@ -725,7 +931,11 @@ class DesktopHostService extends ChangeNotifier {
     final dir = Directory(path);
     if (await dir.exists()) {
       await for (final e in dir.list()) {
-        if (e.path.toLowerCase().endsWith('.gguf')) return e.path;
+        final lower = e.path.toLowerCase();
+        if (lower.endsWith('.gguf') &&
+            !lower.split(RegExp(r'[\\/]')).last.contains('mmproj')) {
+          return e.path;
+        }
       }
     }
     return null;
@@ -758,7 +968,16 @@ class DesktopHostService extends ChangeNotifier {
     final checks = <Future<void>>[];
     // Builtin is on-demand: "online" once running, otherwise ready-to-start.
     if (_advertiseBuiltin) {
-      probe['builtin'] = DesktopRuntimeManager.instance.isRunning
+      final runtime = DesktopRuntimeManager.instance;
+      checks.add(() async {
+        final results = await Future.wait<bool>([
+          _resolveBuiltinModelPath().then((p) => p != null),
+          runtime.isBinaryAvailable,
+        ]);
+        _builtinHasModel = results[0];
+        _builtinBinaryReady = results[1];
+      }());
+      probe['builtin'] = runtime.isRunning
           ? DesktopServiceState.online
           : DesktopServiceState.offline;
     }
@@ -791,6 +1010,7 @@ class DesktopHostService extends ChangeNotifier {
 
     await Future.wait(checks);
 
+    _lastProbe = probe;
     _services = _buildServiceList(probe: probe);
     _probing = false;
     _syncBackendFlags();
@@ -819,15 +1039,28 @@ class DesktopHostService extends ChangeNotifier {
                 ? DesktopServiceState.online
                 : DesktopServiceState.offline));
 
+    final running = builtinState == DesktopServiceState.online;
+    final starting = DesktopRuntimeManager.instance.isStarting;
+    final noModel = !running && !_builtinHasModel;
+    final noRuntime = !running && _builtinHasModel && !_builtinBinaryReady;
     return [
       DesktopServiceStatus(
         key: 'builtin',
         label: 'LM Mini Home',
         state: builtinState,
-        readyOnDemand: true,
-        detail: builtinState == DesktopServiceState.online
+        readyOnDemand: builtinServable,
+        needsModel: builtinState != DesktopServiceState.checking &&
+            builtinState != DesktopServiceState.disabled &&
+            noModel,
+        detail: running
             ? 'Model loaded'
-            : 'Starts automatically on first request',
+            : (starting
+                ? 'Loading model…'
+                : (noModel
+                    ? 'Download a model to share'
+                    : (noRuntime
+                        ? 'Runtime missing — update LM Mini'
+                        : 'Starts automatically on first request'))),
       ),
       DesktopServiceStatus(
         key: 'lmStudio',
@@ -916,6 +1149,7 @@ class DesktopHostService extends ChangeNotifier {
       'token': _authToken ?? '',
       'ek': _encryptionKey ?? '',
       'connectVersion': hostVersion,
+      'capabilities': desktopHostCapabilities,
       'minAppVersion': minAppVersion,
       'backends': backends,
       'host': 'lmMiniDesktop',
@@ -923,6 +1157,10 @@ class DesktopHostService extends ChangeNotifier {
       'imageReady': _a1111Host.isNotEmpty || _comfyUiHost.isNotEmpty,
       'kokoroReady': _kokoroEnabled,
       'platform': Platform.operatingSystem,
+      if (lanUrls.isNotEmpty && lanFingerprint != null) ...{
+        kLanJsonKey: lanUrls,
+        kLanFingerprintJsonKey: lanFingerprint,
+      },
     };
   }
 
